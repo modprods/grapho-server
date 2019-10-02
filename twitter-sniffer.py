@@ -15,9 +15,12 @@ NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "please"
 NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
 
+PUBLIC_URL = "https://api.grapho.app"
+
 SEARCH_QUERY = "realtimelive"
-SEARCH_LIMIT = 5
-TWEET_TRUNCATED = 50
+# See also "realtimelive -filter:retweets"
+SEARCH_LIMIT = 100
+TWEET_TRUNCATED = 120
 
 # from MyStreamListener import MyStreamListener
 
@@ -81,50 +84,63 @@ def neo4j_query(query):
 
 def save_tweet(t):
     q = """
-MERGE (u:User {{name: '{0}', label: '{0} ({1})', screen_name: '{1}', id: {2}, profile_image_url: '{3}' }})
+MERGE (u:User {{name: '{0}', label: '{0} (@{1})', screen_name: '{1}', id: {2}, profile_image_url: '{3}', image_url: '{3}' }})
 RETURN u.name
 """.format(t.user.name,t.user.screen_name,t.user.id,t.user.profile_image_url)
     neo4j_query(q)
-    label = t.text[:TWEET_TRUNCATED] + '..' if len(t.text) > TWEET_TRUNCATED else t.text
-    q = """
-MERGE (t:Tweet {{text: '{0}',label: '{1}', created_at: datetime('{2}'), id: {3}, source: '{4}' }})
-RETURN t.created_at
-""".format(t.text, label, t.created_at.isoformat(),t.id,t.source)
-    # logger.debug(q)
-    neo4j_query(q)
-    q = """
-    MATCH  (p:User {{id: {0} }})
-    MATCH  (t:Tweet {{id: {1} }})
-    MERGE (p)-[r:POSTS]->(t)
-    RETURN p.name
-    """.format(t.user.id,t.id)
-    neo4j_query(q)
-    for h in t.entities['hashtags']:
+    if not (t.text[:4] == 'RT @' or t.retweeted):
+        label = t.text[:TWEET_TRUNCATED] + '..' if len(t.text) > TWEET_TRUNCATED else t.text
+        image_url = "{0}/static/img/sample_tweet.png".format(PUBLIC_URL)
         q = """
-MERGE (h:Hashtag {{name: '{0}', label: '{0}' }})
-RETURN h.name
-""".format(h['text'])
+MERGE (t:Tweet {{text: '{0}',label: '{1}', created_at: datetime('{2}'), id: {3}, source: '{4}', image_url: '{5}' }})
+RETURN t.created_at
+""".format(t.text, label, t.created_at.isoformat(),t.id,t.source,image_url)
         neo4j_query(q)
         q = """
+MATCH  (p:User {{id: {0} }})
+MATCH  (t:Tweet {{id: {1} }})
+MERGE (p)-[r:POSTS]->(t)
+RETURN p.name
+""".format(t.user.id,t.id)
+        neo4j_query(q)
+        for h in t.entities['hashtags']:
+            q = """
+MERGE (h:Hashtag {{name: '{0}', label: '#{0}' }})
+RETURN h.name
+""".format(h['text'])
+            neo4j_query(q)
+            q = """
 MATCH  (h:Hashtag {{name: '{0}' }})
 MATCH  (t:Tweet {{id: {1} }})
 MERGE (t)-[r:TAGS]->(h)
 RETURN h.name
 """.format(h['text'],t.id)
-    neo4j_query(q)
+            neo4j_query(q)
 
-    q = """
+        q = """
 MERGE (s:Source {{name: '{0}', label: '{0}' }})
 RETURN s.name
 """.format(t.source)
-    neo4j_query(q)
-    q = """
-    MATCH  (s:Source {{name: '{0}' }})
-    MATCH  (t:Tweet {{id: {1} }})
-    MERGE (t)-[r:USING]->(s)
-    RETURN s.name
-    """.format(t.source,t.id)
-    neo4j_query(q)
+        neo4j_query(q)
+        q = """
+MATCH  (s:Source {{name: '{0}' }})
+MATCH  (t:Tweet {{id: {1} }})
+MERGE (t)-[r:USING]->(s)
+RETURN s.name
+""".format(t.source,t.id)
+        neo4j_query(q)
+    else:
+        logger.debug("retweet - don't count as Tweet")
+        q = """
+MATCH  (p:User {{id: {0} }})
+MATCH  (t:Tweet {{id: {1} }})
+MERGE (p)-[r:RETWEETS]->(t)
+RETURN p.name
+""".format(t.user.id,t.retweeted_status.id)
+        logger.debug(q)
+        neo4j_query(q)
+
+
 
 def update_handles():
     # ensure Handle exists for each year and update curated NEXT path
