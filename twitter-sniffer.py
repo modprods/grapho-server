@@ -216,7 +216,8 @@ process_twitter_feed()
 
 # DEFAULT - listen for new tweets
 #listen_twitter_feed(follow="3237083798")
-#listen_twitter_feed(track=SEARCH_QUERY)
+logger.info("listening for tweets containing '{0}'".format(SEARCH_QUERY))
+listen_twitter_feed(track=SEARCH_QUERY)
 
 # DEBUGGING
 # api = "https://stat.ripe.net/data/bgplay/data.json?resource=140.99.96.0/21&starttime=2019-07-22T17:45:01&unix_timestamps=TRUE"
