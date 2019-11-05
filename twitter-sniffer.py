@@ -17,7 +17,7 @@ NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
 
 PUBLIC_URL = "https://api.grapho.app"
 
-SEARCH_QUERY = "realtimelive"
+SEARCH_QUERY = "#SIGGRAPHAsia"
 # See also "realtimelive -filter:retweets"
 SEARCH_LIMIT = 100
 TWEET_TRUNCATED = 120
