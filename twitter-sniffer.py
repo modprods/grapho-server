@@ -145,6 +145,12 @@ RETURN p.name
 def update_handles():
     # ensure Handle exists for each year and update curated NEXT path
     q = """
+MATCH (a:Handle)-[r:NEXT]->(b)
+DELETE r
+RETURN a, b"""
+    logger.debug(q)
+    neo4j_query(q)
+    q = """
 MATCH (n:Tweet) WITH n.created_at as date 
 MERGE (h:Handle {{label: toString(date.year) }})
 RETURN h.label
