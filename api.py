@@ -33,6 +33,8 @@ NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
 
 PUBLIC_URL = "https://api.grapho.app"
 
+QUERY_LIMIT = 100
+
 api = responder.API(title="Grapho API", enable_hsts=False, version="0.1", openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
 #api = responder.API(enable_hsts=True)
@@ -293,7 +295,7 @@ def request_handle(req,resp,*, id, lod):
         MATCH path = (a)-[:NEXT*]-() \
         WHERE ID(a)={id} \
         UNWIND (nodes(path)) as n \
-        MATCH path2 = (n)-[*0..{lod}]-() \
+        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-() \
         RETURN collect(nodes(path2)), collect(relationships(path2))"
 
 #    print(f"id {id}\nlod {lod}\nquery {query}")

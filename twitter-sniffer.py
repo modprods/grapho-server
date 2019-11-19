@@ -84,17 +84,17 @@ def neo4j_query(query):
 
 def save_tweet(t):
     q = """
-MERGE (u:User {{name: '{0}', label: '{0} (@{1})', screen_name: '{1}', id: {2}, profile_image_url: '{3}', image_url: '{3}' }})
+MERGE (u:User {{name: '{0}', label: '{0} (@{1})', screen_name: '{1}', id: {2}, profile_image_url: '{3}', id_str: '{4}' }})
 RETURN u.name
-""".format(t.user.name,t.user.screen_name,t.user.id,t.user.profile_image_url)
+""".format(t.user.name,t.user.screen_name,t.user.id,t.user.profile_image_url,t.id_str)
     neo4j_query(q)
     if not (t.text[:4] == 'RT @' or t.retweeted):
         label = t.text[:TWEET_TRUNCATED] + '..' if len(t.text) > TWEET_TRUNCATED else t.text
-        image_url = "{0}/static/img/sample_tweet.png".format(PUBLIC_URL)
+        # image_url = "{0}/static/img/sample_tweet.png".format(PUBLIC_URL)
         q = """
-MERGE (t:Tweet {{text: '{0}',label: '{1}', created_at: datetime('{2}'), id: {3}, source: '{4}', image_url: '{5}' }})
+MERGE (t:Tweet {{text: '{0}',label: '{1}', created_at: datetime('{2}'), id: {3}, source: '{4}', id_str: '{5}' }})
 RETURN t.created_at
-""".format(t.text, label, t.created_at.isoformat(),t.id,t.source,image_url)
+""".format(t.text, label, t.created_at.isoformat(),t.id,t.source,t.id_str)
         neo4j_query(q)
         q = """
 MATCH  (p:User {{id: {0} }})
