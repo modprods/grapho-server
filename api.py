@@ -26,7 +26,7 @@ logger.addHandler(ch)
 
 from pathlib import Path
 
-NEO4J_HOST = "grapho-dev"
+NEO4J_HOST = "neo4j-server"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "please"
 #NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
@@ -45,22 +45,6 @@ API_VERSION = "0.2"
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
-#api = responder.API(enable_hsts=True)
-
-def treemap_squarify(x,y,width,height,values):
-    # values must be sorted descending (and positive, obviously)
-    values.sort(reverse=True)
-
-    # the sum of the values must equal the total area to be laid out
-    # i.e., sum(values) == width * height
-    values = squarify.normalize_sizes(values, width, height)
-
-    # returns a list of rectangles
-    rects = squarify.squarify(values, x, y, width, height)
-
-    # padded rectangles will probably visualize better for certain cases
-    padded_rects = squarify.padded_squarify(values, x, y, width, height) 
-    return padded_rects
 
 @api.schema("PageSchema")
 
@@ -139,45 +123,6 @@ class HandleSchema(Schema):
     start_id = fields.Float()
     label = fields.Str()
 
-@api.route("/all")
-def api_all(req,resp):
-    """All data for experience. Default db
-    ---
-    get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
-        responses:
-            200:
-                description: Respond with all feed values required for experience
-    """
-#    resp.status_code = api.status_codes.HTTP_302
-#    resp.headers['Location'] = '/static/test.json'
-    graphs = []
-    # sets default number of neighbours to include in handles
-    lod = 1
-    handles = requests.get('{0}/handles'.format(PUBLIC_URL))
-    #     for handle_id in [864,884,883,885,886]:
-    for handle in handles.json()['results'][0]['data']:
-      label = handle['graph']['nodes'][0]['properties']['label']
-      handle_id = int(handle['graph']['nodes'][0]['id'])
-      print(label)
-      r = requests.get('{0}/handle/{1}/{2}'.format(PUBLIC_URL, handle_id,lod))
-      g = r.json()['results'][0]['data'][0]['graph']
-      g['handle_id'] = handle_id
-      graphs.append(g)
-    data = dict(
-        author=API_AUTHOR,
-        url=PUBLIC_URL,
-        publisher=API_PUBLISHER,
-        copyright=API_COPYRIGHT,
-        starcharts=[],
-        timelines=[],
- #       points = PointChartSchema().dump(pointcharts,many=True),
- #       pages=PageSchema().dump(pages,many=True),
-        graphs=graphs
-    )
-    resp.media = data
-
 @api.route("/all/{db}")
 def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
@@ -188,6 +133,16 @@ def api_all_database(req,resp,*,db):
         responses:
             200:
                 description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+               description: The database name
     """
 #    resp.status_code = api.status_codes.HTTP_302
 #    resp.headers['Location'] = '/static/test.json'
@@ -219,7 +174,7 @@ def api_all_database(req,resp,*,db):
     )
     resp.media = data
 
-@api.route("/neighbours/{id}/{lod}")
+# @api.route("/neighbours/{id}/{lod}")
 def api_neighbours(req,resp,*, id, lod):
     """Subgraph comprising neighbours of specified node.
     ---
@@ -283,36 +238,26 @@ def neo4j_query(query):
     result = json.loads(r.text)
     return(json,r.status_code)
 
-@api.route("/handles")
-def request_handles(req,resp):
-    """All handles.
-    ---
-    post:
-     summary: Post values
-     description: 
-     responses:
-      200:
-       description: A dictionary to be returned
-    """
-    query = 'MATCH (n:Handle) RETURN n LIMIT 25'
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-#    print(data)
-    r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-#    print(resp.media)
-    resp.status_code = r.status_code
-
 @api.route("/handles/{db}")
 def request_handles_database(req,resp,*,db):
     """All handles.
     ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+               description: The database name
     post:
      summary: Post values
      description: 
@@ -337,7 +282,7 @@ def request_handles_database(req,resp,*,db):
 #    print(resp.media)
     resp.status_code = r.status_code
 
-@api.route("/handle/{id}/{lod}")
+# @api.route("/handle/{id}/{lod}")
 def request_handle(req,resp,*, id, lod):
     """Subgraph referenced by handle.
     ---
@@ -410,7 +355,14 @@ def request_handle_database(req,resp,*, db, id, lod):
            schema:
             type: integer
             minimum: 0
-           description: The level of detail (LOD) to return                      
+           description: The level of detail (LOD) to return
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+           description: The database name                      
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -442,7 +394,7 @@ def request_handle_database(req,resp,*, db, id, lod):
 #    print(resp.media)
     resp.status_code = r.status_code
 
-@api.route("/people")
+# @api.route("/people")
 def people(req,resp):
     """All people.
     ---
@@ -461,7 +413,7 @@ def people(req,resp):
     except:
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/organisations")
+# @api.route("/organisations")
 def organisations(req,resp):
     """All organisations.
     ---
@@ -484,7 +436,7 @@ def organisations(req,resp):
 # https://neo4j.com/docs/rest-docs/current/
 #MATCH p=()-[r:DONATED_TO]->() RETURN p LIMIT 25
 
-@api.route("/donors")
+# @api.route("/donors")
 def request_donors(req,resp):
     """All donors.
     ---
@@ -518,8 +470,8 @@ def request_donors(req,resp):
 #        resp.status_code = api.status_codes.HTTP_503
     #print(graph.run("MATCH (n:Organisation) RETURN n LIMIT 25").to_data_frame())
 
-@api.route("/connectednodes")
-def connectednodes(req,resp):
+@api.route("/connectednodes/{db}")
+def connectednodes(req,resp,*,db):
     """Nodes that have at least one relationship
     ---
     get:
@@ -530,15 +482,23 @@ def connectednodes(req,resp):
                 description: Respond with all feed values required for experience
             503:
                 description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+               description: The database name
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) > 0 RETURN count(n) as connected_nodes").data()
     except:
         resp.status_code = api.status_codes.HTTP_503    
 
-@api.route("/orphanednodes")
-def orphanednodes(req,resp):
+@api.route("/orphanednodes/{db}")
+def orphanednodes(req,resp,*, db):
     """Nodes that have no relationships in graph.
     ---
     get:
@@ -549,16 +509,51 @@ def orphanednodes(req,resp):
                 description: Respond with all feed values required for experience
             503:
                 description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+               description: The database name
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db, auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) < 1 RETURN count(n) as orphaned_nodes").data()
     except:
         resp.status_code = api.status_codes.HTTP_503  
 
-@api.route("/statistics")
-def statistics(req,resp):
+@api.route("/statistics/{db}")
+def statistics(req,resp,*,db):
     """Statistics for this webservice.
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+               description: The database name
+    """
+    try:
+        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        resp.media=graph.run("MATCH (n) RETURN count(n) as nodes").data()
+    except:
+        resp.status_code = api.status_codes.HTTP_503    
+
+@api.route("/databases")
+def databases(req,resp):
+    """List databases available via this webservice.
     ---
     get:
         summary: Respond with all feed values required for experience
@@ -570,53 +565,10 @@ def statistics(req,resp):
                 description: Temporary service issue. Try again later
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n) RETURN count(n) as nodes").data()
+        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name="system",auth=(NEO4J_USER,NEO4J_PASSWORD))
+        resp.media=graph.run("SHOW DATABASES").data()
     except:
-        resp.status_code = api.status_codes.HTTP_503    
-
-@api.route("/statistics/{db}")
-def statistics_new(req,resp,*,db):
-    query = f"\
-        MATCH (n) RETURN count(n) as nodes"
-
-#    print(f"id {id}\nlod {lod}\nquery {query}")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['row']}]
-    }
-    DATABASE = db
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-#    print(resp.media)
-    resp.status_code = r.status_code
-
-@api.route("/databases")
-def databases(req,resp):
-    query = f"\
-        SHOW DATABASES"
-
-#    print(f"id {id}\nlod {lod}\nquery {query}")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['row']}]
-    }
-    DATABASE = "system"
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    # resp.media='TESTING'
-#    print(resp.media)
-    resp.status_code = r.status_code
+        resp.status_code = api.status_codes.HTTP_503  
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
