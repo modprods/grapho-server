@@ -29,13 +29,15 @@ from pathlib import Path
 NEO4J_HOST = "grapho-dev"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "please"
-NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
+#NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
+DATABASE = "twitter"
+NEO4J_API = f"http://neo4j-server:7474/db"
 
 PUBLIC_URL = "https://api.grapho.app"
 
 QUERY_LIMIT = 100
 
-api = responder.API(title="Grapho API", enable_hsts=False, version="0.1", openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
+api = responder.API(title="Grapho API", enable_hsts=False, version="0.2", openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
 #api = responder.API(enable_hsts=True)
 
@@ -135,7 +137,7 @@ class HandleSchema(Schema):
 
 @api.route("/all")
 def api_all(req,resp):
-    """All data for experience.
+    """All data for experience. Default db
     ---
     get:
         summary: Respond with all feed values required for experience
@@ -155,7 +157,6 @@ def api_all(req,resp):
       label = handle['graph']['nodes'][0]['properties']['label']
       handle_id = int(handle['graph']['nodes'][0]['id'])
       print(label)
-      # r = requests.get('http://api.acleverlabel.com/handle/%d/%d' % (handle_id,lod))
       r = requests.get('{0}/handle/{1}/{2}'.format(PUBLIC_URL, handle_id,lod))
       g = r.json()['results'][0]['data'][0]['graph']
       g['handle_id'] = handle_id
@@ -254,7 +255,7 @@ def request_handles(req,resp):
         'resultDataContents': ['graph']}]
     }
 #    print(data)
-    r = requests.post(f'{NEO4J_API}/transaction/commit', \
+    r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
@@ -303,8 +304,10 @@ def request_handle(req,resp,*, id, lod):
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-#    print(data)
-    r = requests.post(f'{NEO4J_API}/transaction/commit', \
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    print(endpoint)
+    print(data)
+    r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
