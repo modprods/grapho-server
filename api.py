@@ -209,11 +209,10 @@ def api_all_database(req,resp,*,db):
       graphs.append(g)
     data = dict(
         author=API_AUTHOR,
+        database=DATABASE,
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
-        starcharts=[],
-        timelines=[],
  #       points = PointChartSchema().dump(pointcharts,many=True),
  #       pages=PageSchema().dump(pages,many=True),
         graphs=graphs
@@ -576,6 +575,48 @@ def statistics(req,resp):
     except:
         resp.status_code = api.status_codes.HTTP_503    
 
+@api.route("/statistics/{db}")
+def statistics_new(req,resp,*,db):
+    query = f"\
+        MATCH (n) RETURN count(n) as nodes"
+
+#    print(f"id {id}\nlod {lod}\nquery {query}")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['row']}]
+    }
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+#    print(resp.media)
+    resp.status_code = r.status_code
+
+@api.route("/databases")
+def databases(req,resp):
+    query = f"\
+        SHOW DATABASES"
+
+#    print(f"id {id}\nlod {lod}\nquery {query}")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['row']}]
+    }
+    DATABASE = "system"
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    # resp.media='TESTING'
+#    print(resp.media)
+    resp.status_code = r.status_code
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
