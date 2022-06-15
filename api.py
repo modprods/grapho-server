@@ -37,7 +37,13 @@ PUBLIC_URL = "https://api.grapho.app"
 
 QUERY_LIMIT = 100
 
-api = responder.API(title="Grapho API", enable_hsts=False, version="0.2", openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
+API_TITLE = "Grapho API"
+API_AUTHOR = "Michela Ledwidge"
+API_PUBLISHER = "Mod Productions Pty Ltd."
+API_COPYRIGHT = "https://creativecommons.org/licenses/by/4.0/"
+API_VERSION = "0.2"
+
+api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
 #api = responder.API(enable_hsts=True)
 
@@ -126,8 +132,6 @@ def hello_world(req, resp):
 def hello_html(req, resp, *, who):
     resp.content = api.template('index.html', who=who)
 
-
-
 @api.schema("HandleSchema")
 
 class HandleSchema(Schema):
@@ -162,10 +166,52 @@ def api_all(req,resp):
       g['handle_id'] = handle_id
       graphs.append(g)
     data = dict(
-        author="Michela Ledwidge",
+        author=API_AUTHOR,
         url=PUBLIC_URL,
-        publisher="Mod Productions Pty Ltd",
-        copyright="https://creativecommons.org/licenses/by/4.0/",
+        publisher=API_PUBLISHER,
+        copyright=API_COPYRIGHT,
+        starcharts=[],
+        timelines=[],
+ #       points = PointChartSchema().dump(pointcharts,many=True),
+ #       pages=PageSchema().dump(pages,many=True),
+        graphs=graphs
+    )
+    resp.media = data
+
+@api.route("/all/{db}")
+def api_all_database(req,resp,*,db):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+    """
+#    resp.status_code = api.status_codes.HTTP_302
+#    resp.headers['Location'] = '/static/test.json'
+    graphs = []
+    # sets default number of neighbours to include in handles
+    lod = 1
+    DATABASE = db
+    handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
+    #     for handle_id in [864,884,883,885,886]:
+    for handle in handles.json()['results'][0]['data']:
+      label = handle['graph']['nodes'][0]['properties']['label']
+      handle_id = int(handle['graph']['nodes'][0]['id'])
+      print(label)
+      r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
+        PUBLIC_URL, DATABASE,handle_id,lod)
+      )
+      g = r.json()['results'][0]['data'][0]['graph']
+      g['handle_id'] = handle_id
+      graphs.append(g)
+    data = dict(
+        author=API_AUTHOR,
+        url=PUBLIC_URL,
+        publisher=API_PUBLISHER,
+        copyright=API_COPYRIGHT,
         starcharts=[],
         timelines=[],
  #       points = PointChartSchema().dump(pointcharts,many=True),
@@ -264,6 +310,34 @@ def request_handles(req,resp):
 #    print(resp.media)
     resp.status_code = r.status_code
 
+@api.route("/handles/{db}")
+def request_handles_database(req,resp,*,db):
+    """All handles.
+    ---
+    post:
+     summary: Post values
+     description: 
+     responses:
+      200:
+       description: A dictionary to be returned
+    """
+    query = 'MATCH (n:Handle) RETURN n LIMIT 25'
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+#    print(data)
+    DATABASE = db
+    # print(DATABASE)
+    r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+#    print(resp.media)
+    resp.status_code = r.status_code
+
 @api.route("/handle/{id}/{lod}")
 def request_handle(req,resp,*, id, lod):
     """Subgraph referenced by handle.
@@ -304,6 +378,59 @@ def request_handle(req,resp,*, id, lod):
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    print(endpoint)
+    print(data)
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+#    print(resp.media)
+    resp.status_code = r.status_code
+
+@api.route("/handle/{db}/{id}/{lod}")
+def request_handle_database(req,resp,*, db, id, lod):
+    """Subgraph referenced by handle.
+    ---
+    get:
+        summary: Respond with all feed values required for subgraph
+        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        parameters:
+         - in: path
+           name: id
+           required: true
+           schema:
+            type: integer
+            minimum: 1
+           description: The handle ID
+         - in: path
+           name: lod
+           required: false
+           schema:
+            type: integer
+            minimum: 0
+           description: The level of detail (LOD) to return                      
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    query = f"\
+        MATCH path = (a)-[:NEXT*]-() \
+        WHERE ID(a)={id} \
+        UNWIND (nodes(path)) as n \
+        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-() \
+        RETURN collect(nodes(path2)), collect(relationships(path2))"
+
+#    print(f"id {id}\nlod {lod}\nquery {query}")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    DATABASE = db
     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     print(endpoint)
     print(data)
