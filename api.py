@@ -27,12 +27,11 @@ logger.addHandler(ch)
 
 from pathlib import Path
 
-NEO4J_HOST = "neo4j-server"
+NEO4J_HOST = "neo4j-server.hq.modprods.com"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "please"
-#NEO4J_API = "http://grapho-neo4j.hq.modprods.com:7474/db/data"
 DATABASE = "twitter"
-NEO4J_API = f"http://neo4j-server:7474/db"
+NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
 
 PUBLIC_URL = "https://api.grapho.app"
 
@@ -42,7 +41,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "https://creativecommons.org/licenses/by/4.0/"
-API_VERSION = "0.2"
+API_VERSION = "0.3"
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -175,8 +174,8 @@ def api_all_database(req,resp,*,db):
     )
     resp.media = data
 
-# @api.route("/neighbours/{id}/{lod}")
-def api_neighbours(req,resp,*, id, lod):
+@api.route("/neighbours/{db}/{node_id}/{distance}")
+def api_neighbours(req,resp,*, db, node_id, distance):
     """Subgraph comprising neighbours of specified node.
     ---
     get:
@@ -184,38 +183,48 @@ def api_neighbours(req,resp,*, id, lod):
         description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
         parameters:
          - in: path
-           name: id
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+           description: The database name
+         - in: path
+           name: node_id
            required: true
            schema:
             type: integer
             minimum: 1
            description: The node ID
          - in: path
-           name: lod
+           name: distance
            required: true
            schema:
             type: integer
             minimum: 1
-           description: Distance of neighbours (LOD) to return                      
+           description: Distance of neighbours to node_id                    
         responses:
             200:
                 description: Respond with all feed values required for experience
             503:
                 description: Temporary service issue. Try again later
     """
-    distance=int(lod)
-    assert(1 <= distance <= 2)
-    query = '''
-MATCH (a)-[*0..{distance}]-(neighbour)
-WHERE id(a) = {node_id}
-RETURN collect(neighbour)
-'''.format(node_id=id,distance=distance)
+    DATABASE = db
+    distance=int(distance)
+    assert(1 <= distance <= 2)  
+    query = f"\
+MATCH (a)-[*0..{distance}]-(neighbour){chr(10)}\
+WHERE id(a) = {node_id}{chr(10)}\
+RETURN collect(neighbour)"
+    print(query)
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-#   logger.debug(data)
-    r = requests.post(f'{NEO4J_API}/transaction/commit', \
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    print(endpoint)
+    print(data)
+    r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
@@ -223,6 +232,7 @@ RETURN collect(neighbour)
     resp.media=json.loads(r.text)
 #    print(resp.media)
     resp.status_code = r.status_code
+
 
 def neo4j_query(query):
     query = query
@@ -265,6 +275,14 @@ def request_handles_database(req,resp,*,db):
      responses:
       200:
        description: A dictionary to be returned
+     parameters:   
+      - in: path
+        name: db
+        required: true
+        schema:
+         type: string
+         minimum: 1
+        description: The database name
     """
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
     data = {'statements': [ 
@@ -386,7 +404,7 @@ def request_handle_database(req,resp,*, db, id, lod):
     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     print(endpoint)
     print(data)
-    r = requests.post(endpoint, \
+    r = requests.get(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
