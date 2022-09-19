@@ -1,0 +1,32 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pytest = "*"
+squarify = "*"
+"py2neo" = "*"
+pandas = "*"
+update = "*"
+wordcloud = "*"
+pillow = "*"
+apispec = "*"
+prompt-toolkit = "==1.0.15"
+matplotlib = "*"
+tweepy = "*"
+imgkit = "*"
+pipenv = "*"
+bs4 = "*"
+lxml = "*"
+apistar = "*"
+responder = "*"
+typesystem = "==0.2.5"
+
+[dev-packages]
+
+[requires]
+python_version = "3.7"
+
+[pipenv]
+allow_prereleases = false

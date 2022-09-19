@@ -4,6 +4,7 @@ from requests.auth import HTTPBasicAuth
 from marshmallow import Schema, fields
 import graphene
 import json
+from starlette.responses import PlainTextResponse, RedirectResponse
 
 #import squarify
 import time
@@ -569,6 +570,11 @@ def databases(req,resp):
         resp.media=graph.run("SHOW DATABASES").data()
     except:
         resp.status_code = api.status_codes.HTTP_503  
+
+@api.route("/twitter")
+def twtter(req,resp):
+    response = RedirectResponse(url='/all/twitter')
+
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
