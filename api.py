@@ -174,6 +174,102 @@ def api_all_database(req,resp,*,db):
     )
     resp.media = data
 
+@api.route("/node/schema/{db}")
+def api_node_schema(req,resp,*, db):
+    """Return schema for database nodes
+    ---
+    get:
+        summary: Respond with schema for database nodes
+        description: Respond with schema for database nodes
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+           description: The database name                 
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    query = f"\
+CALL apoc.meta.schema() yield value{chr(10)}\
+UNWIND apoc.map.sortedProperties(value) as labelData{chr(10)}\
+WITH labelData[0] as label, labelData[1] as data{chr(10)}\
+WHERE data.type = 'node'{chr(10)}\
+UNWIND apoc.map.sortedProperties(data.properties) as property{chr(10)}\
+WITH label, property[0] as property, property[1] as propData{chr(10)}\
+RETURN label,{chr(10)}\
+property,{chr(10)}\
+propData.type as type,{chr(10)}\
+propData.indexed as isIndexed,{chr(10)}\
+propData.unique as uniqueConstraint,{chr(10)}\
+propData.existence as existenceConstraint"
+    data = {'statements': [ 
+            {'statement': query}
+        ]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+@api.route("/rel/schema/{db}")
+def api_rel_schema(req,resp,*, db):
+    """Return schema for database relationships
+    ---
+    get:
+        summary: Respond with schema for database relationships
+        description: Respond with schema for database relationships
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+           description: The database name                 
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+    query = f"\
+CALL apoc.meta.schema() yield value{chr(10)}\
+UNWIND apoc.map.sortedProperties(value) as labelData{chr(10)}\
+WITH labelData[0] as label, labelData[1] as data{chr(10)}\
+WHERE data.type = 'relationship'{chr(10)}\
+UNWIND apoc.map.sortedProperties(data.properties) as property{chr(10)}\
+WITH label, property[0] as property, property[1] as propData{chr(10)}\
+RETURN label,{chr(10)}\
+property,{chr(10)}\
+propData.type as type,{chr(10)}\
+propData.indexed as isIndexed,{chr(10)}\
+propData.unique as uniqueConstraint,{chr(10)}\
+propData.existence as existenceConstraint"
+    data = {'statements': [ 
+            {'statement': query}
+        ]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
 @api.route("/neighbours/{db}/{node_id}/{distance}")
 def api_neighbours(req,resp,*, db, node_id, distance):
     """Subgraph comprising neighbours of specified node.
@@ -210,29 +306,24 @@ def api_neighbours(req,resp,*, db, node_id, distance):
                 description: Temporary service issue. Try again later
     """
     DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     distance=int(distance)
     assert(1 <= distance <= 2)  
     query = f"\
 MATCH (a)-[*0..{distance}]-(neighbour){chr(10)}\
 WHERE id(a) = {node_id}{chr(10)}\
 RETURN collect(neighbour)"
-    print(query)
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-    print(endpoint)
-    print(data)
     r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
         )
     resp.media=json.loads(r.text)
-#    print(resp.media)
     resp.status_code = r.status_code
-
 
 def neo4j_query(query):
     query = query
