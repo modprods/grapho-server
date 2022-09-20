@@ -142,6 +142,7 @@ def api_all_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
+                default: apnic
                description: The database name
     """
 #    resp.status_code = api.status_codes.HTTP_302
@@ -284,6 +285,7 @@ def api_neighbours(req,resp,*, db, node_id, distance):
            schema:
             type: string
             minimum: 1
+            default: apnic
            description: The database name
          - in: path
            name: node_id
@@ -298,6 +300,7 @@ def api_neighbours(req,resp,*, db, node_id, distance):
            schema:
             type: integer
             minimum: 1
+            default: 1
            description: Distance of neighbours to node_id                    
         responses:
             200:
@@ -310,9 +313,9 @@ def api_neighbours(req,resp,*, db, node_id, distance):
     distance=int(distance)
     assert(1 <= distance <= 2)  
     query = f"\
-MATCH (a)-[*0..{distance}]-(neighbour){chr(10)}\
+MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
 WHERE id(a) = {node_id}{chr(10)}\
-RETURN collect(neighbour)"
+RETURN collect(distinct(neighbour)),r"
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
@@ -359,6 +362,7 @@ def request_handles_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
+                default: apnic
                description: The database name
     post:
      summary: Post values
@@ -373,6 +377,7 @@ def request_handles_database(req,resp,*,db):
         schema:
          type: string
          minimum: 1
+         default: apnic
         description: The database name
     """
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
@@ -413,6 +418,7 @@ def request_handle(req,resp,*, id, lod):
            schema:
             type: integer
             minimum: 0
+            default: 1
            description: The level of detail (LOD) to return                      
         responses:
             200:
@@ -465,6 +471,7 @@ def request_handle_database(req,resp,*, db, id, lod):
            schema:
             type: integer
             minimum: 0
+            default: 1
            description: The level of detail (LOD) to return
          - in: path
            name: db
@@ -472,6 +479,7 @@ def request_handle_database(req,resp,*, db, id, lod):
            schema:
             type: string
             minimum: 1
+            default: apnic
            description: The database name                      
         responses:
             200:
@@ -651,6 +659,7 @@ def statistics(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
+                default: apnic
                description: The database name
     """
     try:
