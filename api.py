@@ -320,6 +320,128 @@ RETURN collect(distinct(neighbour)),r"
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
+    print(data)
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+
+@api.route("/ipv4/{db}/{addr}/{width}")
+def api_ipv4(req,resp,*, db, addr,width):
+    """Subgraph showing all about an IPv4 address.
+    ---
+    get:
+        summary: Respond with all feed values required for subgraph
+        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: addr
+           required: true
+           schema:
+            type: string
+            minimum: 1
+           description: The IPV4 starting address e.g. 17 in 101.99.128.0/17
+         - in: path
+           name: width
+           required: true
+           schema:
+            type: integer
+            minimum: 1
+           description: The IPV4 address width e.g. 17 in 101.99.128.0/17
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (ip4:IPv4 {{inetnum: '{addr}/{width}'}}){chr(10)}\
+WITH ip4{chr(10)}\
+OPTIONAL MATCH (ip4)-[ro:DELEGATED_TO]-(org:Org){chr(10)}\
+WITH ip4, collect(org) as org{chr(10)}\
+OPTIONAL MATCH (ip4)-[ra:ORIGINATED_BY]-(asn:ASN){chr(10)}\
+WITH ip4, org, collect(ra) AS ra, collect(asn) as asn{chr(10)}\
+OPTIONAL MATCH (ip4)-[rc:MAINTAINED_BY|HAS_CONTACT]-(con:Contact){chr(10)}\
+WITH ip4, org, ra, asn, collect(rc) AS rc, collect(con) as con{chr(10)}\
+RETURN ip4,{chr(10)}\
+    org     AS organisation,{chr(10)}\
+    ra      AS asnEdges,{chr(10)}\
+    asn     AS asn,{chr(10)}\
+    rc      AS contactEdges,{chr(10)}\
+    con     AS contacts{chr(10)}\
+"
+    print(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    print(data)
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+
+@api.route("/asn/{db}/{asn}")
+def api_asn(req,resp,*, db, asn):
+    """Subgraph showing all about an ASN address.
+    ---
+    get:
+        summary: Respond with all feed values required for subgraph
+        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: asn
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: AS3605
+           description: The ASN id e.g. AS3605
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (n:ASN {{aut_num: '{asn}'}}) RETURN n{chr(10)}\
+"
+    print(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    print(data)
     r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
