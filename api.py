@@ -189,6 +189,7 @@ def api_node_schema(req,resp,*, db):
            schema:
             type: string
             minimum: 1
+            default: apnic
            description: The database name                 
         responses:
             200:
@@ -237,6 +238,7 @@ def api_rel_schema(req,resp,*, db):
            schema:
             type: string
             minimum: 1
+            default: apnic
            description: The database name                 
         responses:
             200:
@@ -293,7 +295,8 @@ def api_neighbours(req,resp,*, db, node_id, distance):
            schema:
             type: integer
             minimum: 1
-           description: The node ID
+            default: 1000
+           description: The node ID (e.g. 1000)
          - in: path
            name: distance
            required: true
@@ -331,8 +334,8 @@ LIMIT {QUERY_LIMIT}"
     resp.status_code = r.status_code
 
 
-@api.route("/ipv4/{db}/{addr}/{width}")
-def api_ipv4(req,resp,*, db, addr,width):
+@api.route("/ipv4/{db}/{addr}/{length}")
+def api_ipv4(req,resp,*, db, addr,length):
     """Subgraph showing all about an IPv4 address.
     ---
     get:
@@ -353,14 +356,16 @@ def api_ipv4(req,resp,*, db, addr,width):
            schema:
             type: string
             minimum: 1
+            default: 101.99.128.0
            description: The IPV4 starting address e.g. 17 in 101.99.128.0/17
          - in: path
-           name: width
+           name: length
            required: true
            schema:
             type: integer
             minimum: 1
-           description: The IPV4 address width e.g. 17 in 101.99.128.0/17
+            default: 17
+           description: The IPV4 address length e.g. 17 in 101.99.128.0/17
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -370,7 +375,7 @@ def api_ipv4(req,resp,*, db, addr,width):
     DATABASE = db
     endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
     query = f"\
-MATCH (ip4:IPv4 {{inetnum: '{addr}/{width}'}}){chr(10)}\
+MATCH (ip4:IPv4 {{inetnum: '{addr}/{length}'}}){chr(10)}\
 WITH ip4{chr(10)}\
 OPTIONAL MATCH (ip4)-[ro:DELEGATED_TO]-(org:Org){chr(10)}\
 WITH ip4, collect(org) as org{chr(10)}\
@@ -728,6 +733,7 @@ def connectednodes(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
+                default: apnic
                description: The database name
     """
     try:
@@ -755,6 +761,7 @@ def orphanednodes(req,resp,*, db):
                schema:
                 type: string
                 minimum: 1
+                default: apnic
                description: The database name
     """
     try:
