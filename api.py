@@ -35,7 +35,7 @@ NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
 
 PUBLIC_URL = "https://api.grapho.app"
 
-QUERY_LIMIT = 100
+QUERY_LIMIT = 300
 
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
@@ -315,7 +315,8 @@ def api_neighbours(req,resp,*, db, node_id, distance):
     query = f"\
 MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
 WHERE id(a) = {node_id}{chr(10)}\
-RETURN collect(distinct(neighbour)),r"
+RETURN collect(distinct(neighbour)),r{chr(10)}\
+LIMIT {QUERY_LIMIT}"
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
