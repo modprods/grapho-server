@@ -616,10 +616,11 @@ def request_handle_database(req,resp,*, db, id, lod):
                 description: Temporary service issue. Try again later
     """
     query = f"\
-        MATCH path = (a)-[:NEXT*]-(){chr(10)}\
+        MATCH path = (a)-[:NEXT*]->(){chr(10)}\
         WHERE ID(a)={id}{chr(10)}\
         UNWIND (nodes(path)) as n{chr(10)}\
-        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(){chr(10)}\
+        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+        WHERE NOT (b:Handle AND NOT ID(b)={id}){chr(10)}\
         RETURN collect(nodes(path2)), collect(relationships(path2))"
 
 #    print(f"id {id}\nlod {lod}\nquery {query}")
