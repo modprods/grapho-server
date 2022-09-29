@@ -317,7 +317,7 @@ def api_neighbours(req,resp,*, db, node_id, distance):
     assert(1 <= distance <= 2)  
     query = f"\
 MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
-WHERE id(a) = {node_id}{chr(10)}\
+WHERE id(a) = {node_id} AND NOT neighbour:Handle{chr(10)}\
 RETURN collect(distinct(neighbour)),r{chr(10)}\
 LIMIT {QUERY_LIMIT}"
     data = {'statements': [ 
