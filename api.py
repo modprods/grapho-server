@@ -15,10 +15,10 @@ from py2neo import Graph
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 # create formatter
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 formatter = logging.Formatter('%(message)s')
@@ -38,6 +38,8 @@ DATABASE = os.getenv('DATABASE')
 logger.debug(f"DATABASE is {DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
+INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',False))
+logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 
 NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
 
@@ -73,7 +75,7 @@ FIXED_QUERIES = [
     {
         "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
     PUBLIC_URL, DATABASE),
-        "label": 'connected Contact nodes to SZ2-AP',
+        "label": 'adjacent ASN sub-graph to AS14051',
         "slug": 'contacts_connected'
     },
     {
@@ -173,41 +175,42 @@ def api_all_database(req,resp,*,db):
       g['handle_id'] = handle_id
       graphs.append(g)
     handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
-    handle_relationship_id = 100000000
-    for f in FIXED_QUERIES:
-        handle_node_id = handle_node_id + 1
-        handle_relationship_id = handle_relationship_id + 1
-        r = requests.get(f["url"])
-        g = {}
-        nodes = []
-        relationships = []
-        for subgraph in r.json()['results'][0]['data']:
-            for n in subgraph['graph']['nodes']:
-                nodes.append(n)
-            for r in subgraph['graph']['relationships']:
-                relationships.append(r)
-        handle_node = dict(
-                id=handle_node_id,
-                labels = ["Handle"],
-                properties= {
-                    "label": f["label"],
-                    "slug": f["slug"]
-                }
-        )
-        nodes.append(handle_node)
-        g["nodes"] = nodes
-        handle_relationship = dict(
-                id=handle_relationship_id,
-                type="NEXT",
-                startNode=str(handle_node_id),
-                endNode=str(nodes[0]['id']),
-                properties= {
-                }
-        )
-        relationships.append(handle_relationship)
-        g["relationships"] = relationships
-        g["handle_id"] = handle_node_id
-        graphs.append(g)
+    handle_relationship_id = 100000000  
+    if INCLUDE_FIXED_QUERIES:
+        for f in FIXED_QUERIES:
+            handle_node_id = handle_node_id + 1
+            handle_relationship_id = handle_relationship_id + 1
+            r = requests.get(f["url"])
+            g = {}
+            nodes = []
+            relationships = []
+            for subgraph in r.json()['results'][0]['data']:
+                for n in subgraph['graph']['nodes']:
+                    nodes.append(n)
+                for r in subgraph['graph']['relationships']:
+                    relationships.append(r)
+            handle_node = dict(
+                    id=handle_node_id,
+                    labels = ["Handle"],
+                    properties= {
+                        "label": f["label"],
+                        "slug": f["slug"]
+                    }
+            )
+            nodes.append(handle_node)
+            g["nodes"] = nodes
+            handle_relationship = dict(
+                    id=handle_relationship_id,
+                    type="NEXT",
+                    startNode=str(handle_node_id),
+                    endNode=str(nodes[0]['id']),
+                    properties= {
+                    }
+            )
+            relationships.append(handle_relationship)
+            g["relationships"] = relationships
+            g["handle_id"] = handle_node_id
+            graphs.append(g)
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
