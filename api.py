@@ -38,8 +38,9 @@ DATABASE = os.getenv('DATABASE')
 logger.debug(f"DATABASE is {DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
-INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',False))
+INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+logger.info(type(INCLUDE_FIXED_QUERIES))
 
 NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
 
@@ -176,7 +177,7 @@ def api_all_database(req,resp,*,db):
       graphs.append(g)
     handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
     handle_relationship_id = 100000000  
-    if INCLUDE_FIXED_QUERIES:
+    if INCLUDE_FIXED_QUERIES == True: # ??? WHY not just if INCLUDE_FIXED_QUERIES
         for f in FIXED_QUERIES:
             handle_node_id = handle_node_id + 1
             handle_relationship_id = handle_relationship_id + 1
@@ -1030,7 +1031,10 @@ def api_fixed_queries(req,resp):
             503:
                 description: Temporary service issue. Try again later
     """
-    resp.media=FIXED_QUERIES
+    if INCLUDE_FIXED_QUERIES == True:
+        resp.media=FIXED_QUERIES
+    else:
+        resp.media = {}
     resp.status_code = 200
 
 if __name__ == "__main__":
