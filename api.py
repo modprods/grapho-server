@@ -5,6 +5,9 @@ from marshmallow import Schema, fields
 import graphene
 import json
 from starlette.responses import PlainTextResponse, RedirectResponse
+from dotenv import load_dotenv
+load_dotenv(verbose=True,override=True)
+import os
 
 #import squarify
 import time
@@ -12,12 +15,13 @@ from py2neo import Graph
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 # create formatter
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(message)s')
 
 # add formatter to ch
 ch.setFormatter(formatter)
@@ -27,21 +31,64 @@ logger.addHandler(ch)
 
 from pathlib import Path
 
-NEO4J_HOST = "neo4j-server.hq.modprods.com"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "please"
-DATABASE = "twitter"
+NEO4J_HOST = os.getenv('NEO4J_HOST')
+NEO4J_USER = os.getenv('NEO4J_USER')
+NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
+DATABASE = os.getenv('DATABASE')
+logger.debug(f"DATABASE is {DATABASE}")
+PUBLIC_URL = os.getenv('PUBLIC_URL')
+QUERY_LIMIT = os.getenv('QUERY_LIMIT')
+
 NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
-
-PUBLIC_URL = "https://api.grapho.app"
-
-QUERY_LIMIT = 300
 
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "https://creativecommons.org/licenses/by/4.0/"
-API_VERSION = "0.3"
+API_VERSION = "0.4"
+
+# fixed queries
+# hardcoded queries returned as Handles without parameters included alongside database saved Handles
+# target for CRM content down the line
+# see https://docs.google.com/spreadsheets/d/1bbrfxiDgvvxgdN5fiuR7XCAP-isiZ04z1pgGJjcocgk/edit#gid=1149119519
+FIXED_QUERIES = [
+    {
+        "url": '{0}/asn_by_country/{1}/FJ'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'ASNs in Fiji',
+        "slug": 'asn_fj'
+    },
+    {
+        "url": '{0}/neighbour_asn_diffcountry/{1}'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'neighbouring ASNs in different countries',
+        "slug": 'asn_crosscountry'
+    },
+    {
+        "url": '{0}/adjacent_asn_subgraph/{1}/AS14051'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'adjacent ASN sub-graph to AS14051',
+        "slug": 'asn_crosscountry'
+    },
+    {
+        "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'connected Contact nodes to SZ2-AP',
+        "slug": 'contacts_connected'
+    },
+    {
+        "url": '{0}/asn/{1}/AS3605'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'ASN AS3605',
+        "slug": 'asn_AS3605'
+    },
+    {
+        "url": '{0}/ipv4/{1}/103.242.49.0/24'.format(
+    PUBLIC_URL, DATABASE),
+        "label": 'IPv4 103.242.49.0/24',
+        "slug": 'ipv4_103.242.49.0/24'
+    },
+]
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -58,14 +105,6 @@ class PageSchema(Schema):
     archive_url = fields.URL()
     archive_date = fields.DateTime()
 
-@api.schema("ChartDataSchema")
-
-class ChartDataSchema(Schema):
-    label = fields.Str()
-    value = fields.Float()
-    rgb = fields.Str()
-    rect = fields.Raw()
-
 class Query(graphene.ObjectType):
     hello = graphene.String(name=graphene.String(default_value="stranger"))
 
@@ -75,36 +114,7 @@ class Query(graphene.ObjectType):
 schema = graphene.Schema(query=Query)
 view = responder.ext.GraphQLView(api=api, schema=schema)
 
-#{ hello(name: "michela") }
-
 api.add_route("/graph", view)
-
-
-@api.schema("StarChartSchema")
-
-class StarChartSchema(Schema):
-    name = fields.Str()
-    id = fields.Integer()
-    source = fields.Str()
-    source_url = fields.URL()
-    items = fields.List(fields.Nested(ChartDataSchema()))
-
-@api.schema("PointChartSchema")
-
-class PointChartSchema(Schema):
-    name = fields.Str()
-    id = fields.Integer()
-    source = fields.Str()
-    source_url = fields.URL()
-    items = fields.List(fields.Nested(ChartDataSchema()))
-
-
-# spawn point charts
-
-pointcharts = []
-starcharts = []
-# DECISION on console or not??
-
 
 pages = []
 
@@ -128,8 +138,8 @@ def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
+        summary: Respond with all feed values required for experience. 
+        description: Respond with all Handle nodes saved in database along with any fixed or parameterised queries hardcoded in API
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -152,25 +162,58 @@ def api_all_database(req,resp,*,db):
     lod = 1
     DATABASE = db
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
-    #     for handle_id in [864,884,883,885,886]:
     for handle in handles.json()['results'][0]['data']:
       label = handle['graph']['nodes'][0]['properties']['label']
       handle_id = int(handle['graph']['nodes'][0]['id'])
-      print(label)
+      logger.debug(label)
       r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
         PUBLIC_URL, DATABASE,handle_id,lod)
       )
       g = r.json()['results'][0]['data'][0]['graph']
       g['handle_id'] = handle_id
       graphs.append(g)
+    handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
+    handle_relationship_id = 100000000
+    for f in FIXED_QUERIES:
+        handle_node_id = handle_node_id + 1
+        handle_relationship_id = handle_relationship_id + 1
+        r = requests.get(f["url"])
+        g = {}
+        nodes = []
+        relationships = []
+        for subgraph in r.json()['results'][0]['data']:
+            for n in subgraph['graph']['nodes']:
+                nodes.append(n)
+            for r in subgraph['graph']['relationships']:
+                relationships.append(r)
+        handle_node = dict(
+                id=handle_node_id,
+                labels = ["Handle"],
+                properties= {
+                    "label": f["label"],
+                    "slug": f["slug"]
+                }
+        )
+        nodes.append(handle_node)
+        g["nodes"] = nodes
+        handle_relationship = dict(
+                id=handle_relationship_id,
+                type="NEXT",
+                startNode=str(handle_node_id),
+                endNode=str(nodes[0]['id']),
+                properties= {
+                }
+        )
+        relationships.append(handle_relationship)
+        g["relationships"] = relationships
+        g["handle_id"] = handle_node_id
+        graphs.append(g)
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
- #       points = PointChartSchema().dump(pointcharts,many=True),
- #       pages=PageSchema().dump(pages,many=True),
         graphs=graphs
     )
     resp.media = data
@@ -390,13 +433,12 @@ RETURN ip4,{chr(10)}\
     rc      AS contactEdges,{chr(10)}\
     con     AS contacts{chr(10)}\
 "
-    print(query)
+    logger.debug(query)
     query = query.replace("\n"," ")
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-    print(data)
     r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
@@ -439,15 +481,37 @@ def api_asn(req,resp,*, db, asn):
     DATABASE = db
     endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
     query = f"\
-MATCH (n:ASN {{aut_num: '{asn}'}}) RETURN n{chr(10)}\
+MATCH (asn:ASN {{aut_num: '{asn}'}}){chr(10)}\
+WITH asn{chr(10)}\
+OPTIONAL MATCH (asn)-[:DELEGATED_TO]-(org:Org){chr(10)}\
+WITH asn, collect(org) as org{chr(10)}\
+OPTIONAL MATCH (asn)-[]-(set:AS_set){chr(10)}\
+WITH asn, org, collect(set) AS set{chr(10)}\
+OPTIONAL MATCH (asn)-[r4:ORIGINATED_BY]-(ip4:IPv4){chr(10)}\
+WITH asn, org, set, collect(r4) AS r4, collect(ip4) as ip4{chr(10)}\
+OPTIONAL MATCH (asn)-[r6:ORIGINATED_BY]-(ip6:IPv6){chr(10)}\
+WITH asn, org, set, r4, ip4, collect(r6) AS r6, collect(ip6) AS ip6{chr(10)}\
+OPTIONAL MATCH (asn)-[rp:NEIGHBOUR_OF]-(peer:ASN){chr(10)}\
+WITH asn, org, set, r4, ip4, r6, ip6, collect(rp) AS rp, collect(peer) AS peer{chr(10)}\
+OPTIONAL MATCH (asn)-[rc:MAINTAINED_BY|HAS_CONTACT]-(con:Contact){chr(10)}\
+WITH asn, org, set, r4, ip4, r6, ip6, rp, peer, collect(rc) AS rc, collect(con) AS con{chr(10)}\
+RETURN asn,{chr(10)}\
+    org     AS organisation,{chr(10)}\
+    set     AS asnSets,{chr(10)}\
+    con     AS contacts,{chr(10)}\
+    rc      AS contactEdges,{chr(10)}\
+    ip4     AS ip4Prefixes,{chr(10)}\
+    r4      AS ip4Edges,{chr(10)}\
+    ip6     AS ip6Prefixes,{chr(10)}\
+    r6      AS ip6Edges,{chr(10)}\
+    peer    AS asnPeers{chr(10)}\
 "
-    print(query)
+    logger.debug(query)
     query = query.replace("\n"," ")
     data = {'statements': [ 
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-    print(data)
     r = requests.post(endpoint, \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
@@ -639,81 +703,6 @@ def request_handle_database(req,resp,*, db, id, lod):
 #    print(resp.media)
     resp.status_code = r.status_code
 
-# @api.route("/people")
-def people(req,resp):
-    """All people.
-    ---
-    get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
-        responses:
-            200:
-                description: Respond with all feed values required for experience
-            503:
-                description: Temporary service issue. Try again later
-    """
-    try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n:Person) RETURN n LIMIT 25").data()
-    except:
-        resp.status_code = api.status_codes.HTTP_503
-
-# @api.route("/organisations")
-def organisations(req,resp):
-    """All organisations.
-    ---
-    get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
-        responses:
-            200:
-                description: Respond with all feed values required for experience
-            503:
-                description: Temporary service issue. Try again later
-    """
-    try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n:Organisation) RETURN n LIMIT 25").data()
-    except:
-        resp.status_code = api.status_codes.HTTP_503
-    #print(graph.run("MATCH (n:Organisation) RETURN n LIMIT 25").to_data_frame())
-    
-# https://neo4j.com/docs/rest-docs/current/
-#MATCH p=()-[r:DONATED_TO]->() RETURN p LIMIT 25
-
-# @api.route("/donors")
-def request_donors(req,resp):
-    """All donors.
-    ---
-    get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
-        responses:
-            200:
-                description: Respond with all feed values required for experience
-            503:
-                description: Temporary service issue. Try again later
-    """
-    # try:
-    graph = Graph(f"bolt://{NEO4J_HOST}:7687",auth=(NEO4J_USER,NEO4J_PASSWORD))
-    query = "MATCH p=()-[r:DONATED_TO]->() RETURN p LIMIT 25"
-    data = graph.run(cypher=query).data()
-    donor_data = []
-    print(data)
-    for d in data:
-        this_donor = dict(
-        id = d['p'].start_node.identity,
-        title = d['p'].start_node['title']
-        )
-        donor_data.append(this_donor)
-    print(donor_data)
-    data = dict(
-        donors= donor_data
-    )
-    resp.media = data
-#    except:
-#        resp.status_code = api.status_codes.HTTP_503
-    #print(graph.run("MATCH (n:Organisation) RETURN n LIMIT 25").to_data_frame())
 
 @api.route("/connectednodes/{db}")
 def connectednodes(req,resp,*,db):
@@ -822,6 +811,224 @@ def databases(req,resp):
 def twtter(req,resp):
     response = RedirectResponse(url='/all/twitter')
 
+
+@api.route("/neighbour_asn_diffcountry/{db}")
+def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: apnic
+               description: The database name
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (as1:ASN)-[r1:NEIGHBOUR_OF]-(as2:ASN)-[r2:NEIGHBOUR_OF]-(as3:ASN){chr(10)}\
+WHERE as1.country <> as2.country AND as2.country <> as3.country{chr(10)}\
+RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
+"
+    logger.debug(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+@api.route("/asn_by_country/{db}/{country}")
+def api_apnic_asn_country(req,resp,*,db,country):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: apnic
+             - in: path
+               name: country
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: FJ
+               description: The database name
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
+"
+    logger.debug(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+@api.route("/connected_contacts/{db}/{contact}")
+def api_apnic_connected_contacts(req,resp,*,db,contact):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: apnic
+               description: The database name
+             - in: path
+               name: contact
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: SZ2-AP
+               description: The contact name
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (c:Contact {{contact: '{contact}'}}){chr(10)}\
+CALL apoc.path.subgraphAll(c, {{{chr(10)}\
+  labelFilter: 'Contact',{chr(10)}\
+  relationshipFilter: 'HAS_CONTACT|MAINTAINED_BY',{chr(10)}\
+  maxLevel:10,{chr(10)}\
+  limit:200{chr(10)}\
+}}) YIELD nodes, relationships{chr(10)}\
+RETURN nodes, relationships LIMIT 200{chr(10)}\
+"
+    logger.debug(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+@api.route("/adjacent_asn_subgraph/{db}/{asn}")
+def api_apnic_asn_country(req,resp,*,db,asn):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: Respond with all feed values required for experience
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: db
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: apnic
+             - in: path
+               name: asn
+               required: true
+               schema:
+                type: string
+                minimum: 1
+                default: AS14051
+               description: The database name
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (as:ASN {{aut_num: '{asn}'}}){chr(10)}\
+CALL apoc.path.subgraphAll(as, {{{chr(10)}\
+  labelFilter: 'ASN|Contact',{chr(10)}\
+  relationshipFilter: 'NEIGHBOUR_OF',{chr(10)}\
+  maxLevel:1,{chr(10)}\
+  limit:200{chr(10)}\
+}}) YIELD nodes, relationships{chr(10)}\
+RETURN nodes, relationships LIMIT 200{chr(10)}\
+"
+    logger.debug(query)
+    query = query.replace("\n"," ")
+    data = {'statements': [ 
+        {'statement': query, 
+        'resultDataContents': ['graph']}]
+    }
+    r = requests.post(endpoint, \
+        headers = {'Content-type': 'application/json'}, \
+        json = data, \
+        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        )
+    resp.media=json.loads(r.text)
+    resp.status_code = r.status_code
+
+@api.route("/fixed_queries")
+def api_fixed_queries(req,resp):
+    """All data for experience. Selection of database slug in API
+    ---
+    get:
+        summary: Respond with all feed values required for experience
+        description: List of queries that are hardcoded in API and returned by /all query alongside database stored Handles
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    resp.media=FIXED_QUERIES
+    resp.status_code = 200
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
