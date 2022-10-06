@@ -15,10 +15,10 @@ from query import GraphQuery
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -43,7 +43,7 @@ PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
-logger.info(type(INCLUDE_FIXED_QUERIES))
+# logger.info(type(INCLUDE_FIXED_QUERIES))
 
 if int(NEO4J_PORT_HTTP) == 7474:
     logger.info("dev API instance running")
@@ -223,6 +223,7 @@ def api_all_database(req,resp,*,db):
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
+        neo4j_api=NEO4J_API,
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
@@ -375,18 +376,16 @@ MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
 WHERE id(a) = {node_id} AND NOT neighbour:Handle{chr(10)}\
 RETURN collect(distinct(neighbour)),r{chr(10)}\
 LIMIT {QUERY_LIMIT}"
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    print(data)
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 
 @api.route("/ipv4/{db}/{addr}/{length}")
@@ -446,18 +445,15 @@ RETURN ip4,{chr(10)}\
     con     AS contacts{chr(10)}\
 "
     logger.debug(query)
-    query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 
 @api.route("/asn/{db}/{asn}")
@@ -519,18 +515,15 @@ RETURN asn,{chr(10)}\
     peer    AS asnPeers{chr(10)}\
 "
     logger.debug(query)
-    query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 def neo4j_query(query):
     query = query
@@ -587,78 +580,14 @@ def request_handles_database(req,resp,*,db):
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
 
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run(query).data()
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
-
-    # DATABASE = db
-    # data = {'statements': [ 
-    #     {'statement': query, 
-    #     'resultDataContents': ['graph']}]
-    # }
-#     r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
-#         headers = {'Content-type': 'application/json'}, \
-#         json = data, \
-#         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-#         )
-#     resp.media=json.loads(r.text)
-# #    print(resp.media)
-#     resp.status_code = r.status_code
-
-# @api.route("/handle/{id}/{lod}")
-def request_handle(req,resp,*, id, lod):
-    """Subgraph referenced by handle.
-    ---
-    get:
-        summary: Respond with all feed values required for subgraph
-        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
-        parameters:
-         - in: path
-           name: id
-           required: true
-           schema:
-            type: integer
-            minimum: 1
-           description: The handle ID
-         - in: path
-           name: lod
-           required: false
-           schema:
-            type: integer
-            minimum: 0
-            default: 1
-           description: The level of detail (LOD) to return                      
-        responses:
-            200:
-                description: Respond with all feed values required for experience
-            503:
-                description: Temporary service issue. Try again later
-    """
-    query = f"\
-        MATCH path = (a)-[:NEXT*]-(){chr(10)}\
-        WHERE ID(a)={id}{chr(10)}\
-        UNWIND (nodes(path)) as n{chr(10)}\
-        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(){chr(10)}\
-        RETURN collect(nodes(path2)), collect(relationships(path2))"
-
-    print(f"id {id}\nlod {lod}\nquery {query}")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-    print(endpoint)
-    print(data)
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-#    print(resp.media)
-    resp.status_code = r.status_code
+        resp.status_code = api.status_codes.HTTP_503 
 
 @api.route("/handle/{db}/{id}/{lod}")
 def request_handle_database(req,resp,*, db, id, lod):
@@ -705,21 +634,15 @@ def request_handle_database(req,resp,*, db, id, lod):
         WHERE NOT (b:Handle AND NOT ID(b)={id}){chr(10)}\
         RETURN collect(nodes(path2)), collect(relationships(path2))"
 
-#    print(f"id {id}\nlod {lod}\nquery {query}")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    DATABASE = db
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-#    print(resp.media)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        logger.debug(query)
+        graph = q.run(query)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 
 @api.route("/connectednodes/{db}")
@@ -884,21 +807,18 @@ WHERE as1.country <> as2.country AND as2.country <> as3.country{chr(10)}\
 RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
 "
     logger.debug(query)
-    query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/asn_by_country/{db}/{country}")
-def api_apnic_asn_country(req,resp,*,db,country):
+def api_apnic_asn_by_country(req,resp,*,db,country):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -932,18 +852,15 @@ def api_apnic_asn_country(req,resp,*,db,country):
 MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
 "
     logger.debug(query)
-    query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/connected_contacts/{db}/{contact}")
 def api_apnic_connected_contacts(req,resp,*,db,contact):
@@ -988,18 +905,15 @@ CALL apoc.path.subgraphAll(c, {{{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
     logger.debug(query)
-    query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/adjacent_asn_subgraph/{db}/{asn}")
 def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
@@ -1042,9 +956,7 @@ CALL apoc.path.subgraphAll(as, {{{chr(10)}\
 }}) YIELD nodes, relationships{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
-    query = query.replace("\n"," ")
-    # logger.info(query)
-
+    logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
         graph = q.run(query)
@@ -1053,19 +965,8 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503 
+        resp.status_code = api.status_codes.HTTP_503
 
-    # data = {'statements': [ 
-    #     {'statement': query, 
-    #     'resultDataContents': ['graph']}]
-    # }
-    # r = requests.post(endpoint, \
-    #     headers = {'Content-type': 'application/json'}, \
-    #     json = data, \
-    #     auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-    #     )
-    # resp.media=json.loads(r.text)
-    # resp.status_code = r.status_code
 
 @api.route("/fixed_queries")
 def api_fixed_queries(req,resp):

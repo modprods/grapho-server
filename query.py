@@ -5,10 +5,10 @@ import json
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -32,13 +32,6 @@ PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 
-if int(NEO4J_PORT_HTTP) == 7474:
-    logger.info("dev API instance running")
-    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_HTTP}"
-else:
-    logger.info("live API instance running")
-    NEO4J_API = f"neo4j+s://{NEO4J_HOST}"
-
 query = f"\
 MATCH (as:ASN {{aut_num: 'AS14051'}}){chr(10)}\
 CALL apoc.path.subgraphAll(as, {{{chr(10)}\
@@ -50,7 +43,7 @@ CALL apoc.path.subgraphAll(as, {{{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
 
-#query = "MATCH (n:Handle) RETURN n LIMIT 25"
+query = "MATCH (n:Handle) RETURN n LIMIT 25"
 
 from neo4j import GraphDatabase
 
@@ -70,34 +63,29 @@ class GraphQuery:
     def _read_query(tx, query):
         # logger.debug(query)
      #   query = query.replace("\n"," ")
-        result = tx.run(query)
+        result = tx.run(query).graph()
         # logger.debug(result)
         graph = {}
         nodes = []
         relationships = []
-        for idx,result_list in enumerate(result.single()):
-            # logger.debug(f"({idx}) - loop ")
-            for i in result_list:
-                # logger.debug(type(i).__name__)
-                if type(i).__name__ == "Node":
-                    # logger.debug(list(i.labels))
-                    n = dict(
-                        id = i.element_id,
-                        labels = list(i.labels),
-                        properties = dict(i.items())
-                    )
-                    nodes.append(n)
-                    # logger.debug(n)
-                else:
-                    r = dict(
-                        id = i.element_id,
-                        type = i.type,
-                        startNode = i.nodes[0].element_id,
-                        endNode = i.nodes[1].element_id,
-                        properties = dict(i.items())
-                    )
-                    relationships.append(r)
-                    # logger.debug(r)
+
+        for i in result.nodes:
+            n = dict(
+                id = i.element_id,
+                labels = list(i.labels),
+                properties = dict(i.items())
+            )
+            nodes.append(n)
+        for i in result.relationships:
+            r = dict(
+                id = i.element_id,
+                type = i.type,
+                startNode = i.nodes[0].element_id,
+                endNode = i.nodes[1].element_id,
+                properties = dict(i.items())
+            )
+            relationships.append(r)            
+
         graph = dict(
             results = [dict(
                 columns = [],
@@ -115,27 +103,35 @@ class GraphQuery:
             transaction = {}
         )
         # logger.debug(type(graph))
-        output = json.dumps(graph)
+        output = json.dumps(graph, default = str)
         # logger.debug(output)
         return output
 
 if __name__ == "__main__":
-    logger.debug(NEO4J_API)
-    logger.debug(NEO4J_USER)
-    logger.debug(NEO4J_PASSWORD)
-    # greeter = HelloWorldExample(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
-    # greeter.print_greeting("hello, world")
-    # greeter.close()
+    # logger.debug(NEO4J_API)
+    # logger.debug(NEO4J_USER)
+    # logger.debug(NEO4J_PASSWORD)
+
+    if int(NEO4J_PORT_HTTP) == 7474:
+        logger.info("dev API instance running")
+        NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_HTTP}"
+    else:
+        logger.info("live API instance running")
+        NEO4J_API = f"neo4j+s://{NEO4J_HOST}"
+
     query = f"\
-MATCH (as:ASN {{aut_num: 'AS14051'}}){chr(10)}\
-CALL apoc.path.subgraphAll(as, {{{chr(10)}\
-  labelFilter: 'ASN|Contact',{chr(10)}\
-  relationshipFilter: 'NEIGHBOUR_OF',{chr(10)}\
-  maxLevel:1,{chr(10)}\
-  limit:200{chr(10)}\
-}}) YIELD nodes, relationships{chr(10)}\
-RETURN nodes, relationships LIMIT 200{chr(10)}\
+MATCH (n:Handle) RETURN n LIMIT 25\
 "
+#     query = f"\
+# MATCH (as:ASN {{aut_num: 'AS14051'}}){chr(10)}\
+# CALL apoc.path.subgraphAll(as, {{{chr(10)}\
+#   labelFilter: 'ASN|Contact',{chr(10)}\
+#   relationshipFilter: 'NEIGHBOUR_OF',{chr(10)}\
+#   maxLevel:1,{chr(10)}\
+#   limit:200{chr(10)}\
+# }}) YIELD nodes, relationships{chr(10)}\
+# RETURN nodes, relationships LIMIT 200{chr(10)}\
+# "
     # logger.debug(query)
     q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
     graph = q.run(query)
