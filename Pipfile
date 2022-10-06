@@ -22,6 +22,7 @@ lxml = "*"
 apistar = "*"
 responder = "*"
 typesystem = "==0.2.5"
+neo4j = "*"
 
 [dev-packages]
 

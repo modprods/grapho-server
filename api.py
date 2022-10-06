@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 load_dotenv(verbose=True,override=True)
 import os
 
-#import squarify
 import time
 from py2neo import Graph
 
@@ -19,7 +18,8 @@ logger.setLevel(logging.INFO)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
-# create formatter
+
+# create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 formatter = logging.Formatter('%(message)s')
 
@@ -34,6 +34,8 @@ from pathlib import Path
 NEO4J_HOST = os.getenv('NEO4J_HOST')
 NEO4J_USER = os.getenv('NEO4J_USER')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
+NEO4J_PORT_HTTP = os.getenv('NEO4J_PORT_HTTP')
+NEO4J_PORT_BOLT = os.getenv('NEO4J_PORT_BOLT')
 DATABASE = os.getenv('DATABASE')
 logger.debug(f"DATABASE is {DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
@@ -42,15 +44,20 @@ INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 logger.info(type(INCLUDE_FIXED_QUERIES))
 
-NEO4J_API = f"http://{NEO4J_HOST}:7474/db"
+if int(NEO4J_PORT_HTTP) == 7474:
+    logger.info("dev API instance running")
+    NEO4J_API = f"http://{NEO4J_HOST}:{NEO4J_PORT_HTTP}/db"
+else:
+    logger.info("live API instance running")
+    NEO4J_API = f"https://{NEO4J_HOST}/db"
 
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
-API_COPYRIGHT = "https://creativecommons.org/licenses/by/4.0/"
-API_VERSION = "0.4"
+API_COPYRIGHT = "All Rights Reserved"
+API_VERSION = "0.5"
 
-# fixed queries
+# APNIC fixed queries
 # hardcoded queries returned as Handles without parameters included alongside database saved Handles
 # target for CRM content down the line
 # see https://docs.google.com/spreadsheets/d/1bbrfxiDgvvxgdN5fiuR7XCAP-isiZ04z1pgGJjcocgk/edit#gid=1149119519
@@ -76,7 +83,7 @@ FIXED_QUERIES = [
     {
         "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
     PUBLIC_URL, DATABASE),
-        "label": 'adjacent ASN sub-graph to AS14051',
+        "label": 'connected contacts to SZ2-AP',
         "slug": 'contacts_connected'
     },
     {
@@ -577,21 +584,27 @@ def request_handles_database(req,resp,*,db):
         description: The database name
     """
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-#    print(data)
-    DATABASE = db
-    # print(DATABASE)
-    r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-#    print(resp.media)
-    resp.status_code = r.status_code
+
+    try:
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        resp.media=graph.run(query).data()
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
+    # DATABASE = db
+    # data = {'statements': [ 
+    #     {'statement': query, 
+    #     'resultDataContents': ['graph']}]
+    # }
+#     r = requests.post(f'{NEO4J_API}/{DATABASE}/tx', \
+#         headers = {'Content-type': 'application/json'}, \
+#         json = data, \
+#         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+#         )
+#     resp.media=json.loads(r.text)
+# #    print(resp.media)
+#     resp.status_code = r.status_code
 
 # @api.route("/handle/{id}/{lod}")
 def request_handle(req,resp,*, id, lod):
@@ -731,7 +744,7 @@ def connectednodes(req,resp,*,db):
                description: The database name
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) > 0 RETURN count(n) as connected_nodes").data()
     except:
         resp.status_code = api.status_codes.HTTP_503    
@@ -759,7 +772,7 @@ def orphanednodes(req,resp,*, db):
                description: The database name
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db, auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) < 1 RETURN count(n) as orphaned_nodes").data()
     except:
         resp.status_code = api.status_codes.HTTP_503  
@@ -786,10 +799,34 @@ def statistics(req,resp,*,db):
                 default: apnic
                description: The database name
     """
+    query = f"\
+MATCH (n) RETURN count(n) as nodes{chr(10)}\
+"
+    logger.info(query)
+    query = query.replace("\n"," ")
+#     data = {'statements': [ 
+#         {'statement': query, 
+#         'resultDataContents': ['graph']}]
+#     }
+#     logger.info(data)
+#     DATABASE = db
+#     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
+#     logger.info(endpoint)
+#     r = requests.post(endpoint, \
+#         headers = {'Content-type': 'application/json'}, \
+#         json = data, \
+#         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+#         )
+#     resp.media=json.loads(r.text)
+# #    print(resp.media)
+#     resp.status_code = r.status_code
+
+    # bolt direct (neo4j+s) working
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("MATCH (n) RETURN count(n) as nodes").data()
-    except:
+    except Exception as e:
+        logger.error(e)
         resp.status_code = api.status_codes.HTTP_503    
 
 @api.route("/databases")
@@ -806,7 +843,7 @@ def databases(req,resp):
                 description: Temporary service issue. Try again later
     """
     try:
-        graph = Graph(f"bolt://{NEO4J_HOST}:7687",name="system",auth=(NEO4J_USER,NEO4J_PASSWORD))
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name="system",auth=(NEO4J_USER,NEO4J_PASSWORD))
         resp.media=graph.run("SHOW DATABASES").data()
     except:
         resp.status_code = api.status_codes.HTTP_503  
@@ -1004,19 +1041,34 @@ CALL apoc.path.subgraphAll(as, {{{chr(10)}\
 }}) YIELD nodes, relationships{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
-    logger.debug(query)
     query = query.replace("\n"," ")
-    data = {'statements': [ 
-        {'statement': query, 
-        'resultDataContents': ['graph']}]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+    logger.info(query)
+    try:
+        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        logger.info(graph)
+        resp.media=dict(
+            results= [dict(
+                columns = [],
+                data = graph.run(query).data()
+            )],
+            errors = []
         )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503 
+
+    # data = {'statements': [ 
+    #     {'statement': query, 
+    #     'resultDataContents': ['graph']}]
+    # }
+    # r = requests.post(endpoint, \
+    #     headers = {'Content-type': 'application/json'}, \
+    #     json = data, \
+    #     auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+    #     )
+    # resp.media=json.loads(r.text)
+    # resp.status_code = r.status_code
 
 @api.route("/fixed_queries")
 def api_fixed_queries(req,resp):
