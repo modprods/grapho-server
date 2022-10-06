@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv(verbose=True,override=True)
 import os
+import json
 
 import logging
 logger = logging.getLogger(__name__)
@@ -67,49 +68,54 @@ class GraphQuery:
 
     @staticmethod
     def _read_query(tx, query):
-        logger.debug(query)
+        # logger.debug(query)
      #   query = query.replace("\n"," ")
         result = tx.run(query)
-        # logger.debug(result)
-        for i,r in enumerate(result.single()):
-            logger.debug(f"({i}) - loop ")
-            for s in r:
-                logger.debug(type(s).__name__)
-                logger.debug(f"{s}\n\n")
-        return None
-
-class HelloWorldExample:
-
-    def __init__(self, uri, user, password):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
-
-    def close(self):
-        self.driver.close()
-
-    def print_greeting(self, message):
-        with self.driver.session() as session:
-            results = session.execute_read(self._read_stats,message)
-            # print(type(results[0]))
-            # logger.debug(results)
-            # for r in results:
-            #     logger.debug(type(r))
-
-    @staticmethod
-    def _read_stats(tx, message):
-        query
-        query = query.replace("\n"," ")
-        logger.debug(query)
-        result = tx.run(query)
-        # logger.debug(result)
-        # logger.debug(result.single()[0])
-        # r = result.data()
-        for r in result.single():
-            # logger.debug(r)
-            for s in r:
-                logger.debug(type(s))
-                logger.debug("\n\n\n")
-        return None
-
+        logger.debug(result)
+        graph = {}
+        nodes = []
+        relationships = []
+        for idx,result_list in enumerate(result.single()):
+            # logger.debug(f"({idx}) - loop ")
+            for i in result_list:
+                # logger.debug(type(i).__name__)
+                if type(i).__name__ == "Node":
+                    # logger.debug(list(i.labels))
+                    n = dict(
+                        id = i.element_id,
+                        labels = list(i.labels),
+                        properties = dict(i.items())
+                    )
+                    nodes.append(n)
+                    # logger.debug(n)
+                else:
+                    r = dict(
+                        id = i.element_id,
+                        type = i.type,
+                        startNode = 1,
+                        endNode = 2,
+                        properties = dict(i.items())
+                    )
+                    relationships.append(r)
+                    # logger.debug(r)
+        graph = dict(
+            results = dict(
+                columns = [],
+                data = [
+                    dict(
+                        graph = dict(
+                            nodes=nodes,
+                            relationships=relationships
+                        )
+                    )
+                ]
+            ),
+            errors = [],
+            commit = "",
+            transaction = {}
+        )
+        logger.debug(graph)
+        return json.dumps(graph)
 
 if __name__ == "__main__":
     logger.debug(NEO4J_API)
@@ -128,7 +134,8 @@ CALL apoc.path.subgraphAll(as, {{{chr(10)}\
 }}) YIELD nodes, relationships{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
-    logger.debug(query)
+    # logger.debug(query)
     q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
-    q.run(query)
+    graph = q.run(query)
+    # logger.debug(graph)
     q.close()

@@ -11,6 +11,7 @@ import os
 
 import time
 from py2neo import Graph
+from query import GraphQuery
 
 import logging
 logger = logging.getLogger(__name__)
