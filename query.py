@@ -32,7 +32,6 @@ PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 
-
 if int(NEO4J_PORT_HTTP) == 7474:
     logger.info("dev API instance running")
     NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_HTTP}"
@@ -65,13 +64,14 @@ class GraphQuery:
     def run(self, query):
         with self.driver.session() as session:
             results = session.execute_read(self._read_query,query)
+            return results
 
     @staticmethod
     def _read_query(tx, query):
         # logger.debug(query)
      #   query = query.replace("\n"," ")
         result = tx.run(query)
-        logger.debug(result)
+        # logger.debug(result)
         graph = {}
         nodes = []
         relationships = []
@@ -92,14 +92,14 @@ class GraphQuery:
                     r = dict(
                         id = i.element_id,
                         type = i.type,
-                        startNode = 1,
-                        endNode = 2,
+                        startNode = i.nodes[0].element_id,
+                        endNode = i.nodes[1].element_id,
                         properties = dict(i.items())
                     )
                     relationships.append(r)
                     # logger.debug(r)
         graph = dict(
-            results = dict(
+            results = [dict(
                 columns = [],
                 data = [
                     dict(
@@ -109,13 +109,15 @@ class GraphQuery:
                         )
                     )
                 ]
-            ),
+            )],
             errors = [],
             commit = "",
             transaction = {}
         )
-        logger.debug(graph)
-        return json.dumps(graph)
+        # logger.debug(type(graph))
+        output = json.dumps(graph)
+        # logger.debug(output)
+        return output
 
 if __name__ == "__main__":
     logger.debug(NEO4J_API)
@@ -137,5 +139,5 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
     # logger.debug(query)
     q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
     graph = q.run(query)
-    # logger.debug(graph)
+    logger.debug(graph)
     q.close()

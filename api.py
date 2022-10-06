@@ -47,10 +47,10 @@ logger.info(type(INCLUDE_FIXED_QUERIES))
 
 if int(NEO4J_PORT_HTTP) == 7474:
     logger.info("dev API instance running")
-    NEO4J_API = f"http://{NEO4J_HOST}:{NEO4J_PORT_HTTP}/db"
+    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
 else:
     logger.info("live API instance running")
-    NEO4J_API = f"https://{NEO4J_HOST}/db"
+    NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
 
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
@@ -1002,7 +1002,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
     resp.status_code = r.status_code
 
 @api.route("/adjacent_asn_subgraph/{db}/{asn}")
-def api_apnic_asn_country(req,resp,*,db,asn):
+def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1043,17 +1043,13 @@ CALL apoc.path.subgraphAll(as, {{{chr(10)}\
 RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
     query = query.replace("\n"," ")
-    logger.info(query)
+    # logger.info(query)
+
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
-        logger.info(graph)
-        resp.media=dict(
-            results= [dict(
-                columns = [],
-                data = graph.run(query).data()
-            )],
-            errors = []
-        )
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
