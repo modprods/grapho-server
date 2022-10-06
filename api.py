@@ -15,10 +15,10 @@ from query import GraphQuery
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
