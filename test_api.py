@@ -15,13 +15,13 @@ def test_all(api):
      r = api.requests.get("/all/apnic")
      assert r.status_code == 200
 
-def test_node_schema(api):
-     r = api.requests.get("/node/schema/apnic")
-     assert r.status_code == 200
+# def test_node_schema(api):
+#      r = api.requests.get("/node/schema/apnic")
+#      assert r.status_code == 200
 
-def test_rel_schema(api):
-     r = api.requests.get("/rel/schema/apnic")
-     assert r.status_code == 200
+# def test_rel_schema(api):
+#      r = api.requests.get("/rel/schema/apnic")
+#      assert r.status_code == 200
 
 
 
@@ -57,17 +57,17 @@ def test_handle(api):
      r = api.requests.get("/handle/apnic/4252153/1")
      assert r.status_code == 200
 
-def test_connectednodes(api):
-     r = api.requests.get("/connectednodes/apnic")
-     assert r.status_code == 200
+# def test_connectednodes(api):
+#      r = api.requests.get("/connectednodes/apnic")
+#      assert r.status_code == 200
 
-def test_orphanednodes(api):
-     r = api.requests.get("/orphanednodes/apnic")
-     assert r.status_code == 200
+# def test_orphanednodes(api):
+#      r = api.requests.get("/orphanednodes/apnic")
+#      assert r.status_code == 200
 
-def test_statistics(api):
-     r = api.requests.get("/statistics/apnic")
-     assert r.status_code == 200
+# def test_statistics(api):
+#      r = api.requests.get("/statistics/apnic")
+#      assert r.status_code == 200
 
 def test_databases(api):
      r = api.requests.get("/databases")
