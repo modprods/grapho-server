@@ -1,9 +1,7 @@
 import pytest
 import api as service
-import os
 
 #  pytest
-PUBLIC_URL = "https://apnic.grapho.app"
 
 @pytest.fixture
 def api():
@@ -11,7 +9,6 @@ def api():
 
 def test_hello_world(api):
     r = api.requests.get("/")
-    
     assert r.status_code == 200
 
 def test_all(api):
