@@ -15,10 +15,10 @@ from query import GraphQuery
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -149,7 +149,7 @@ def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience. 
+        summary: All handles and fixed queries 
         description: Respond with all Handle nodes saved in database along with any fixed or parameterised queries hardcoded in API
         responses:
             200:
@@ -231,7 +231,7 @@ def api_all_database(req,resp,*,db):
     )
     resp.media = data
 
-@api.route("/node/schema/{db}")
+#@api.route("/node/schema/{db}")
 def api_node_schema(req,resp,*, db):
     """Return schema for database nodes
     ---
@@ -280,7 +280,7 @@ propData.existence as existenceConstraint"
     resp.media=json.loads(r.text)
     resp.status_code = r.status_code
 
-@api.route("/rel/schema/{db}")
+#@api.route("/rel/schema/{db}")
 def api_rel_schema(req,resp,*, db):
     """Return schema for database relationships
     ---
@@ -334,8 +334,8 @@ def api_neighbours(req,resp,*, db, node_id, distance):
     """Subgraph comprising neighbours of specified node.
     ---
     get:
-        summary: Respond with all feed values required for subgraph
-        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        summary: Node neighbours
+        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
         parameters:
          - in: path
            name: db
@@ -393,8 +393,8 @@ def api_ipv4(req,resp,*, db, addr,length):
     """Subgraph showing all about an IPv4 address.
     ---
     get:
-        summary: Respond with all feed values required for subgraph
-        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        summary: All about IPv4
+        description: Respond with all feed values required for subgraph showing all about an IPv4 address. given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
         parameters:
          - in: path
            name: db
@@ -455,14 +455,76 @@ RETURN ip4,{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/ipv6/{db}/{addr}/{length}")
+def api_ipv6_roa(req,resp,*, db, addr,length):
+    """Subgraph showing all about a ROA auth query for IPv6.
+    ---
+    get:
+        summary: ROA auth for IPv6
+        description: Respond with all feed values required for subgraph showing all about a ROA auth query for IPv6. given address
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: addr
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: '2407:5600::'
+           description: The IPv6 address e.g. '2407:5600::'
+         - in: path
+           name: length
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: '32'
+           description: The IPv6 address length e.g. 32 in 2407:5600::/32
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (ip6:IPv6 {{inet6num: '{addr}/{length}'}}){chr(10)}\
+WITH ip6{chr(10)}\
+OPTIONAL MATCH (ip6)-[ORIGINATED_BY]-(asn:ASN){chr(10)}\
+WITH ip6, collect(asn) as asnList, collect(asn.aut_num) AS aut_numList{chr(10)}\
+OPTIONAL MATCH (roa:ROA){chr(10)}\
+WHERE roa.asn IN aut_numList{chr(10)}\
+  AND roa.lower <= ip6.lower{chr(10)}\
+  AND roa.upper >= ip6.upper{chr(10)}\
+  AND ip6.length <= roa.maxLength{chr(10)}\
+RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
+"
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/asn/{db}/{asn}")
 def api_asn(req,resp,*, db, asn):
     """Subgraph showing all about an ASN address.
     ---
     get:
-        summary: Respond with all feed values required for subgraph
-        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        summary: All about ASN
+        description: Respond with all feed values required for experience showing all about an ASN address. given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
         parameters:
          - in: path
            name: db
@@ -545,8 +607,8 @@ def request_handles_database(req,resp,*,db):
     """All handles.
     ---
     get:
-        summary: Respond with all feed values required for experience
-        description: Respond with all feed values required for experience
+        summary: All handles
+        description: Respond with all feed values required for experience showing all handles.
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -594,8 +656,8 @@ def request_handle_database(req,resp,*, db, id, lod):
     """Subgraph referenced by handle.
     ---
     get:
-        summary: Respond with all feed values required for subgraph
-        description: Respond with all feed values required for experience given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        summary: Handle lookup
+        description: Respond with all feed values required for a handle given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
         parameters:
          - in: path
            name: id
@@ -645,7 +707,7 @@ def request_handle_database(req,resp,*, db, id, lod):
         resp.status_code = api.status_codes.HTTP_503
 
 
-@api.route("/connectednodes/{db}")
+#@api.route("/connectednodes/{db}")
 def connectednodes(req,resp,*,db):
     """Nodes that have at least one relationship
     ---
@@ -673,7 +735,7 @@ def connectednodes(req,resp,*,db):
     except:
         resp.status_code = api.status_codes.HTTP_503    
 
-@api.route("/orphanednodes/{db}")
+#@api.route("/orphanednodes/{db}")
 def orphanednodes(req,resp,*, db):
     """Nodes that have no relationships in graph.
     ---
@@ -701,7 +763,7 @@ def orphanednodes(req,resp,*, db):
     except:
         resp.status_code = api.status_codes.HTTP_503  
 
-@api.route("/statistics/{db}")
+#@api.route("/statistics/{db}")
 def statistics(req,resp,*,db):
     """Statistics for this webservice.
     ---
@@ -758,7 +820,7 @@ def databases(req,resp):
     """List databases available via this webservice.
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: All databases
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -782,7 +844,7 @@ def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: Neighbouring ASNs in different countries
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -822,7 +884,7 @@ def api_apnic_asn_by_country(req,resp,*,db,country):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: ASNs by country
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -867,7 +929,7 @@ def api_apnic_connected_contacts(req,resp,*,db,contact):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: Connected contacts
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -920,7 +982,7 @@ def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: Adjacent ASN
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -973,7 +1035,7 @@ def api_fixed_queries(req,resp):
     """All data for experience. Selection of database slug in API
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: Fixed queries
         description: List of queries that are hardcoded in API and returned by /all query alongside database stored Handles
         responses:
             200:
