@@ -45,6 +45,10 @@ def test_ipv4(api):
      r = api.requests.get("/ipv4/apnic/101.99.128.0/17")
      assert r.status_code == 200
 
+def test_ipv6(api):
+     r = api.requests.get("/ipv6/apnic/2407:5600::/32")
+     assert r.status_code == 200
+
 def test_asn(api):
      r = api.requests.get("/asn/apnic/AS3605")
      assert r.status_code == 200
