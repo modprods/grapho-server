@@ -518,6 +518,80 @@ RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
+def api_possible_paths(req,resp,*, db, addr1,length1,addr2,length2):
+    """Subgraph showing possible paths between two IPv4 adddresses
+    ---
+    get:
+        summary: Possible paths between two IPv4 adddresses
+        description: Respond with all feed values required for subgraph showing all about possible paths between two given IPv4 adddresses
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: addr1
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: 202.159.0.0
+           description: The IPV4 starting address e.g. 202.159.0.0 in 202.159.0.0/24
+         - in: path
+           name: length1
+           required: true
+           schema:
+            type: integer
+            minimum: 1
+            default: 24
+           description: The IPV4 address length e.g. 24 in 202.159.0.0/24
+         - in: path
+           name: addr2
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: 104.28.92.0
+           description: The IPV4 starting address e.g. 104.28.92.0 in 104.28.92.0/24
+         - in: path
+           name: length2
+           required: true
+           schema:
+            type: integer
+            minimum: 1
+            default: 24
+           description: The IPV4 address length e.g. 24 in 104.28.92.0/24
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH{chr(10)}\
+  (i:IPv4 {{inetnum: '{addr1}/{length1}'}}),{chr(10)}\
+  (n:IPv4 {{inetnum: '{addr2}/{length2}'}}),{chr(10)}\
+  p = allShortestPaths((i)-[*..5]-(n)){chr(10)}\
+RETURN p{chr(10)}\
+"
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
 @api.route("/asn/{db}/{asn}")
 def api_asn(req,resp,*, db, asn):
     """Subgraph showing all about an ASN address.
