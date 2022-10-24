@@ -57,6 +57,10 @@ def test_handles(api):
      r = api.requests.get("/handles/apnic")
      assert r.status_code == 200
 
+def test_post_handles(api):
+     r = api.requests.post("/handles/apnic", json={})
+     assert r.status_code == 200
+
 def test_handle(api):
      r = api.requests.get("/handle/apnic/4252153/1")
      assert r.status_code == 200
