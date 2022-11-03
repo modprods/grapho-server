@@ -27,7 +27,7 @@ NEO4J_USER = os.getenv('NEO4J_USER')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 NEO4J_PORT_HTTP = os.getenv('NEO4J_PORT_HTTP')
 NEO4J_PORT_BOLT = os.getenv('NEO4J_PORT_BOLT')
-DATABASE = os.getenv('DATABASE')
+NEO4J_DATABASE = os.getenv('NEO4J_DATABASE')
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
@@ -39,21 +39,30 @@ else:
     logger.info("live API instance running")
     NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, unit_of_work
 
 class GraphQuery:
-    def __init__(self, uri, user, password):
+    def __init__(self, uri, user, password,database = None):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        # rules for overriding database selection
+        if NEO4J_DATABASE:  # override all queries based on environment
+            self.database = NEO4J_DATABASE
+        elif database:      # override based on query parameter
+            self.database = database
+        else:               # no override, use neo4j server default db
+            self.database = None
 
     def close(self):
         self.driver.close()
 
     def run(self, query):
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             results = session.execute_read(self._read_query,query)
             return results
 
+    
     @staticmethod
+    @unit_of_work(timeout=1)
     def _read_query(tx, query):
         # logger.debug(query)
      #   query = query.replace("\n"," ")
@@ -108,9 +117,10 @@ class GraphQuery:
         return output
 
 if __name__ == "__main__":
-    logger.debug(NEO4J_API)
-    logger.debug(NEO4J_USER)
-    logger.debug(NEO4J_PASSWORD)
+    # logger.debug(NEO4J_API)
+    # logger.debug(NEO4J_USER)
+    # logger.debug(NEO4J_PASSWORD)
+    logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 
     query = f"\
 MATCH{chr(10)}\
@@ -122,6 +132,7 @@ RETURN collect(nodes(p)), collect(relationships(p)){chr(10)}\
 
     # logger.debug(query)
     q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
-    graph = q.run(query)
-    logger.debug(graph)
+    # test query
+    # graph = q.run(query)
+    # logger.debug(graph)
     q.close()

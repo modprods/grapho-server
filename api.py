@@ -37,8 +37,8 @@ NEO4J_USER = os.getenv('NEO4J_USER')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 NEO4J_PORT_HTTP = os.getenv('NEO4J_PORT_HTTP')
 NEO4J_PORT_BOLT = os.getenv('NEO4J_PORT_BOLT')
-DATABASE = os.getenv('DATABASE')
-logger.debug(f"DATABASE is {DATABASE}")
+NEO4J_DATABASE = os.getenv('NEO4J_DATABASE')
+logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
@@ -56,7 +56,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "0.5"
+API_VERSION = "1.0"
 
 # APNIC fixed queries
 # hardcoded queries returned as Handles without parameters included alongside database saved Handles
@@ -65,37 +65,37 @@ API_VERSION = "0.5"
 FIXED_QUERIES = [
     {
         "url": '{0}/asn_by_country/{1}/FJ'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'ASNs in Fiji',
         "slug": 'asn_fj'
     },
     {
         "url": '{0}/neighbour_asn_diffcountry/{1}'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'neighbouring ASNs in different countries',
         "slug": 'asn_crosscountry'
     },
     {
         "url": '{0}/adjacent_asn_subgraph/{1}/AS14051'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'adjacent ASN sub-graph to AS14051',
         "slug": 'asn_crosscountry'
     },
     {
         "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'connected contacts to SZ2-AP',
         "slug": 'contacts_connected'
     },
     {
         "url": '{0}/asn/{1}/AS3605'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'ASN AS3605',
         "slug": 'asn_AS3605'
     },
     {
         "url": '{0}/ipv4/{1}/103.242.49.0/24'.format(
-    PUBLIC_URL, DATABASE),
+    PUBLIC_URL, NEO4J_DATABASE),
         "label": 'IPv4 103.242.49.0/24',
         "slug": 'ipv4_103.242.49.0/24'
     },
@@ -163,7 +163,7 @@ def api_all_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: neo4j
                description: The database name
     """
 #    resp.status_code = api.status_codes.HTTP_302
@@ -402,7 +402,7 @@ def api_ipv4(req,resp,*, db, addr,length):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: neo4j
            description: The database name
          - in: path
            name: addr
@@ -446,7 +446,7 @@ RETURN ip4,{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -695,7 +695,7 @@ def request_handles_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: neo4j
                description: The database name
     post:
      summary: Post values
@@ -710,13 +710,13 @@ def request_handles_database(req,resp,*,db):
         schema:
          type: string
          minimum: 1
-         default: apnic
+         default: neo4j
         description: The database name
     """
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
 
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -771,7 +771,7 @@ def request_handle_database(req,resp,*, db, id, lod):
         RETURN collect(nodes(path2)), collect(relationships(path2))"
 
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
         logger.debug(query)
         graph = q.run(query)
         resp.media = json.loads(graph)
