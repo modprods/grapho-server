@@ -42,8 +42,9 @@ else:
 from neo4j import GraphDatabase, unit_of_work
 
 class GraphQuery:
-    def __init__(self, uri, user, password,database = None):
+    def __init__(self, uri, user, password, req, database = None):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.path = req.url.path
         # rules for overriding database selection
         if NEO4J_DATABASE:  # override all queries based on environment
             self.database = NEO4J_DATABASE
@@ -57,13 +58,13 @@ class GraphQuery:
 
     def run(self, query):
         with self.driver.session(database=self.database) as session:
-            results = session.execute_read(self._read_query,query)
+            results = session.execute_read(self._read_query,query,self.path)
             return results
 
     
     @staticmethod
-    @unit_of_work(timeout=1)
-    def _read_query(tx, query):
+    @unit_of_work(timeout=1) # not working
+    def _read_query(tx, query, path):
         # logger.debug(query)
      #   query = query.replace("\n"," ")
         result = tx.run(query).graph()
@@ -109,6 +110,7 @@ class GraphQuery:
             )],
             errors = [],
             commit = "",
+            path = path,
             transaction = {}
         )
         # logger.debug(type(graph))

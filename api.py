@@ -378,7 +378,7 @@ RETURN collect(distinct(neighbour)),r{chr(10)}\
 LIMIT {QUERY_LIMIT}"
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -445,8 +445,9 @@ RETURN ip4,{chr(10)}\
     con     AS contacts{chr(10)}\
 "
     logger.debug(query)
+    # logger.debug(req.url.path)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req,db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -509,7 +510,7 @@ RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -583,7 +584,7 @@ RETURN p{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -652,7 +653,7 @@ RETURN asn,{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -716,7 +717,7 @@ def request_handles_database(req,resp,*,db):
     query = 'MATCH (n:Handle) RETURN n LIMIT 25'
 
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -771,7 +772,7 @@ def request_handle_database(req,resp,*, db, id, lod):
         RETURN collect(nodes(path2)), collect(relationships(path2))"
 
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,db)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         logger.debug(query)
         graph = q.run(query)
         resp.media = json.loads(graph)
@@ -944,7 +945,7 @@ RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -989,7 +990,7 @@ MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -1042,7 +1043,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
@@ -1094,7 +1095,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
 "
     logger.debug(query)
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
