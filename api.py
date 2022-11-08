@@ -350,7 +350,7 @@ def api_neighbours(req,resp,*, db, node_id, distance):
            required: true
            schema:
             type: integer
-            minimum: 1
+            minimum: 0
             default: 1000
            description: The node ID (e.g. 1000)
          - in: path
