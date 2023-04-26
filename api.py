@@ -56,49 +56,14 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.0"
+API_VERSION = "1.1"
 
 # APNIC fixed queries
 # hardcoded queries returned as Handles without parameters included alongside database saved Handles
 # target for CRM content down the line
 # see https://docs.google.com/spreadsheets/d/1bbrfxiDgvvxgdN5fiuR7XCAP-isiZ04z1pgGJjcocgk/edit#gid=1149119519
 FIXED_QUERIES = [
-    {
-        "url": '{0}/asn_by_country/{1}/FJ'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASNs in Fiji',
-        "slug": 'asn_fj'
-    },
-    {
-        "url": '{0}/neighbour_asn_diffcountry/{1}'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'neighbouring ASNs in different countries',
-        "slug": 'asn_crosscountry'
-    },
-    {
-        "url": '{0}/adjacent_asn_subgraph/{1}/AS14051'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'adjacent ASN sub-graph to AS14051',
-        "slug": 'asn_crosscountry'
-    },
-    {
-        "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'connected contacts to SZ2-AP',
-        "slug": 'contacts_connected'
-    },
-    {
-        "url": '{0}/asn/{1}/AS3605'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASN AS3605',
-        "slug": 'asn_AS3605'
-    },
-    {
-        "url": '{0}/ipv4/{1}/103.242.49.0/24'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'IPv4 103.242.49.0/24',
-        "slug": 'ipv4_103.242.49.0/24'
-    },
+   
 ]
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
@@ -651,6 +616,53 @@ RETURN asn,{chr(10)}\
     r6      AS ip6Edges,{chr(10)}\
     peer    AS asnPeers{chr(10)}\
 "
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
+@api.route("/search/{db}/{query}")
+def api_default_freetext_search(req,resp,*, db, query):
+    """Subgraph showing free text search results from default index 'defaultFulltextIndex'
+    ---
+    get:
+        summary: Search results from defaultFulltextIndex
+        description: Respond with all .
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: query
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: ANZ*
+           description: The search query e.g. ANZ*
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f'''
+CALL db.index.fulltext.queryNodes("defaultFulltextIndex", "{query}") YIELD node
+RETURN node 
+'''
     logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
