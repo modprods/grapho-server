@@ -80,8 +80,5 @@ FIXED_QUERIES = [
 
 Grapho licensees, see your Rack&Pin documentation for further detail
 
-e.g.
-
-    http://<production>.rackandpin.com/wiki/OperationsGuide#APIserver
 
 (C) 2023 Mod Productions Pty Ltd
