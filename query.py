@@ -56,25 +56,35 @@ class GraphQuery:
     def close(self):
         self.driver.close()
 
-    def run(self, query):
+    def run(self, query,graph=True):
         with self.driver.session(database=self.database) as session:
-            results = session.execute_read(self._read_query,query,self.path)
+            results = session.execute_read(self._read_query,query,self.path,graph)
             return results
 
-    
     @staticmethod
     @unit_of_work(timeout=1) # not working
-    def _read_query(tx, query, path):
-        # logger.debug(query)
+    def _read_query(tx, query, path,graph):
+        logger.debug('_read_query')
+        logger.debug(query)
      #   query = query.replace("\n"," ")
+        # for queries where not expecting a graph result, simpler result set
+        if not graph:
+            logger.debug("not a graph result")
+            result = tx.run(query)
+            data = [dict(record) for record in result]
+            # logger.debug(data)
+            output = json.dumps(data, default = str)
+            return output
         result = tx.run(query).graph()
-        # logger.debug(result)
         graph = {}
         nodes = []
         relationships = []
         # raw
         # logger.debug("raw in query.py")
-        # logger.debug(result) 
+        # logger.debug(result)
+
+        # for i in result:
+        #     logger.debug(i)
         logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
             n = dict(
@@ -119,9 +129,9 @@ class GraphQuery:
         return output
 
 if __name__ == "__main__":
-    # logger.debug(NEO4J_API)
-    # logger.debug(NEO4J_USER)
-    # logger.debug(NEO4J_PASSWORD)
+    logger.debug(NEO4J_API)
+    logger.debug(NEO4J_USER)
+    logger.debug(NEO4J_PASSWORD)
     logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 
     query = f"\
