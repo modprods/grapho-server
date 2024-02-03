@@ -43,6 +43,7 @@ PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
 
 # Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
 # Grapho supports Handles stored in DB, API, UE Map, and overall Project 
@@ -69,7 +70,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.2"
+API_VERSION = "1.3"
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -140,7 +141,7 @@ def api_all_database(req,resp,*,db):
 #    resp.headers['Location'] = '/static/test.json'
     graphs = []
     # sets default number of neighbours to include in handles
-    lod = 1
+    lod = 2
     DATABASE = db
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
     for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
@@ -194,6 +195,9 @@ def api_all_database(req,resp,*,db):
                 graphs.append(g)
             except TypeError:
                 logger.error(f"Fixed Query error for {f['url']}")
+    if INCLUDE_ADDITIONAL_DIALOGUE:
+        dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
+        additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
@@ -201,7 +205,8 @@ def api_all_database(req,resp,*,db):
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
-        graphs=graphs
+        graphs=graphs,
+        additional_dialogue=additional_dialogue
     )
     resp.media = data
 
@@ -355,6 +360,87 @@ LIMIT {QUERY_LIMIT}"
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/dialogue/{db}")
+def api_dialogue(req,resp,*, db):
+    """Subgraph comprising additional dialogue.
+    ---
+    get:
+        summary: Dialogue nodes
+        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (a:Dialogue)\
+RETURN a \
+LIMIT {QUERY_LIMIT}"
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
+@api.route("/game/{db}")
+def api_game(req,resp,*, db):
+    """Subgraph intended for use in game engine.
+    ---
+    get:
+        summary: Game specific nodes
+        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: groove
+           description: The database name
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"""
+MATCH (n)
+WHERE NOT 'Term' IN labels(n) AND
+NOT '_Bloom_Scene_' IN labels(n) AND
+NOT '_Bloom_Perspective_' IN labels(n)
+OPTIONAL MATCH (n)-[r]-(x)
+RETURN n,r
+"""
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/ipv4/{db}/{addr}/{length}")
 def api_ipv4(req,resp,*, db, addr,length):
