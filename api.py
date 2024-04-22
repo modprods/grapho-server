@@ -140,9 +140,11 @@ def api_all_database(req,resp,*,db):
 #    resp.status_code = api.status_codes.HTTP_302
 #    resp.headers['Location'] = '/static/test.json'
     graphs = []
-    # sets default number of neighbours to include in handles
-    lod = 2
     DATABASE = db
+    # LOD sets default number of neighbours to include in handles
+    lod = 1 # default is 1
+    if DATABASE == 'groove':
+        lod = 2
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
     for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
       label = handle['properties']['label']
