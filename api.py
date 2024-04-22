@@ -43,6 +43,20 @@ PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
+
+# Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
+# Grapho supports Handles stored in DB, API, UE Map, and overall Project 
+
+FIXED_QUERIES = [
+    {
+        "url": '{0}/asn_by_country/{1}/FJ'.format(
+    PUBLIC_URL, NEO4J_DATABASE),
+        "label": 'ASNs in Fiji',
+        "slug": 'asn_fj'
+    },
+]
+
 # logger.info(type(INCLUDE_FIXED_QUERIES))
 
 if int(NEO4J_PORT_HTTP) == 7474:
@@ -56,50 +70,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.0"
-
-# APNIC fixed queries
-# hardcoded queries returned as Handles without parameters included alongside database saved Handles
-# target for CRM content down the line
-# see https://docs.google.com/spreadsheets/d/1bbrfxiDgvvxgdN5fiuR7XCAP-isiZ04z1pgGJjcocgk/edit#gid=1149119519
-FIXED_QUERIES = [
-    {
-        "url": '{0}/asn_by_country/{1}/FJ'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASNs in Fiji',
-        "slug": 'asn_fj'
-    },
-    {
-        "url": '{0}/neighbour_asn_diffcountry/{1}'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'neighbouring ASNs in different countries',
-        "slug": 'asn_crosscountry'
-    },
-    {
-        "url": '{0}/adjacent_asn_subgraph/{1}/AS14051'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'adjacent ASN sub-graph to AS14051',
-        "slug": 'asn_crosscountry'
-    },
-    {
-        "url": '{0}/connected_contacts/{1}/SZ2-AP'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'connected contacts to SZ2-AP',
-        "slug": 'contacts_connected'
-    },
-    {
-        "url": '{0}/asn/{1}/AS3605'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASN AS3605',
-        "slug": 'asn_AS3605'
-    },
-    {
-        "url": '{0}/ipv4/{1}/103.242.49.0/24'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'IPv4 103.242.49.0/24',
-        "slug": 'ipv4_103.242.49.0/24'
-    },
-]
+API_VERSION = "1.3"
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -169,13 +140,15 @@ def api_all_database(req,resp,*,db):
 #    resp.status_code = api.status_codes.HTTP_302
 #    resp.headers['Location'] = '/static/test.json'
     graphs = []
-    # sets default number of neighbours to include in handles
-    lod = 1
     DATABASE = db
+    # LOD sets default number of neighbours to include in handles
+    lod = 1 # default is 1
+    if DATABASE == 'groove':
+        lod = 2
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
-    for handle in handles.json()['results'][0]['data']:
-      label = handle['graph']['nodes'][0]['properties']['label']
-      handle_id = int(handle['graph']['nodes'][0]['id'])
+    for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
+      label = handle['properties']['label']
+      handle_id = int(handle['id'])
       logger.debug(label)
       r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
         PUBLIC_URL, DATABASE,handle_id,lod)
@@ -189,37 +162,44 @@ def api_all_database(req,resp,*,db):
         for f in FIXED_QUERIES:
             handle_node_id = handle_node_id + 1
             handle_relationship_id = handle_relationship_id + 1
+            logger.debug(f['url'])
             r = requests.get(f["url"])
             g = {}
             nodes = []
             relationships = []
-            for subgraph in r.json()['results'][0]['data']:
-                for n in subgraph['graph']['nodes']:
-                    nodes.append(n)
-                for r in subgraph['graph']['relationships']:
-                    relationships.append(r)
-            handle_node = dict(
-                    id=handle_node_id,
-                    labels = ["Handle"],
-                    properties= {
-                        "label": f["label"],
-                        "slug": f["slug"]
-                    }
-            )
-            nodes.append(handle_node)
-            g["nodes"] = nodes
-            handle_relationship = dict(
-                    id=handle_relationship_id,
-                    type="NEXT",
-                    startNode=str(handle_node_id),
-                    endNode=str(nodes[0]['id']),
-                    properties= {
-                    }
-            )
-            relationships.append(handle_relationship)
-            g["relationships"] = relationships
-            g["handle_id"] = handle_node_id
-            graphs.append(g)
+            try:
+                for subgraph in r.json()['results'][0]['data']:
+                    for n in subgraph['graph']['nodes']:
+                        nodes.append(n)
+                    for r in subgraph['graph']['relationships']:
+                        relationships.append(r)
+                handle_node = dict(
+                        id=handle_node_id,
+                        labels = ["Handle"],
+                        properties= {
+                            "label": f["label"],
+                            "slug": f["slug"]
+                        }
+                )
+                nodes.append(handle_node)
+                g["nodes"] = nodes
+                handle_relationship = dict(
+                        id=handle_relationship_id,
+                        type="NEXT",
+                        startNode=str(handle_node_id),
+                        endNode=str(nodes[0]['id']),
+                        properties= {
+                        }
+                )
+                relationships.append(handle_relationship)
+                g["relationships"] = relationships
+                g["handle_id"] = handle_node_id
+                graphs.append(g)
+            except TypeError:
+                logger.error(f"Fixed Query error for {f['url']}")
+    if INCLUDE_ADDITIONAL_DIALOGUE:
+        dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
+        additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
@@ -227,11 +207,12 @@ def api_all_database(req,resp,*,db):
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
-        graphs=graphs
+        graphs=graphs,
+        additional_dialogue=additional_dialogue
     )
     resp.media = data
 
-#@api.route("/node/schema/{db}")
+@api.route("/node/schema/{db}")
 def api_node_schema(req,resp,*, db):
     """Return schema for database nodes
     ---
@@ -254,7 +235,6 @@ def api_node_schema(req,resp,*, db):
                 description: Temporary service issue. Try again later
     """
     DATABASE = db
-    endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     query = f"\
 CALL apoc.meta.schema() yield value{chr(10)}\
 UNWIND apoc.map.sortedProperties(value) as labelData{chr(10)}\
@@ -268,19 +248,17 @@ propData.type as type,{chr(10)}\
 propData.indexed as isIndexed,{chr(10)}\
 propData.unique as uniqueConstraint,{chr(10)}\
 propData.existence as existenceConstraint"
-    data = {'statements': [ 
-            {'statement': query}
-        ]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
 
-#@api.route("/rel/schema/{db}")
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query,False)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503    
+
+@api.route("/rel/schema/{db}")
 def api_rel_schema(req,resp,*, db):
     """Return schema for database relationships
     ---
@@ -317,17 +295,14 @@ propData.type as type,{chr(10)}\
 propData.indexed as isIndexed,{chr(10)}\
 propData.unique as uniqueConstraint,{chr(10)}\
 propData.existence as existenceConstraint"
-    data = {'statements': [ 
-            {'statement': query}
-        ]
-    }
-    r = requests.post(endpoint, \
-        headers = {'Content-type': 'application/json'}, \
-        json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-        )
-    resp.media=json.loads(r.text)
-    resp.status_code = r.status_code
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query,False)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503 
 
 @api.route("/neighbours/{db}/{node_id}/{distance}")
 def api_neighbours(req,resp,*, db, node_id, distance):
@@ -387,6 +362,87 @@ LIMIT {QUERY_LIMIT}"
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/dialogue/{db}")
+def api_dialogue(req,resp,*, db):
+    """Subgraph comprising additional dialogue.
+    ---
+    get:
+        summary: Dialogue nodes
+        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"\
+MATCH (a:Dialogue)\
+RETURN a \
+LIMIT {QUERY_LIMIT}"
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
+@api.route("/game/{db}")
+def api_game(req,resp,*, db):
+    """Subgraph intended for use in game engine.
+    ---
+    get:
+        summary: Game specific nodes
+        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: groove
+           description: The database name
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f"""
+MATCH (n)
+WHERE NOT 'Term' IN labels(n) AND
+NOT '_Bloom_Scene_' IN labels(n) AND
+NOT '_Bloom_Perspective_' IN labels(n)
+OPTIONAL MATCH (n)-[r]-(x)
+RETURN n,r
+"""
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 @api.route("/ipv4/{db}/{addr}/{length}")
 def api_ipv4(req,resp,*, db, addr,length):
@@ -662,6 +718,53 @@ RETURN asn,{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/search/{db}/{query}")
+def api_default_freetext_search(req,resp,*, db, query):
+    """Subgraph showing free text search results from default index 'defaultFulltextIndex'
+    ---
+    get:
+        summary: Search results from defaultFulltextIndex
+        description: Respond with all .
+        parameters:
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: apnic
+           description: The database name
+         - in: path
+           name: query
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: ANZ*
+           description: The search query e.g. ANZ*
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    DATABASE = db
+    endpoint = f'{NEO4J_API}/{DATABASE}/tx' 
+    query = f'''
+CALL db.index.fulltext.queryNodes("defaultFulltextIndex", "{query}") YIELD node
+RETURN node 
+'''
+    logger.debug(query)
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD, req, db)
+        graph = q.run(query)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
+
 def neo4j_query(query):
     query = query
     data = {'statements': [ 
@@ -838,12 +941,12 @@ def orphanednodes(req,resp,*, db):
     except:
         resp.status_code = api.status_codes.HTTP_503  
 
-#@api.route("/statistics/{db}")
+@api.route("/statistics/{db}")
 def statistics(req,resp,*,db):
-    """Statistics for this webservice.
+    """Statistics for this database.
     ---
     get:
-        summary: Respond with all feed values required for experience
+        summary: Counts nodes and relationships
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -857,37 +960,17 @@ def statistics(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: neo4j
                description: The database name
     """
-    query = f"\
-MATCH (n) RETURN count(n) as nodes{chr(10)}\
-"
-    logger.info(query)
-    query = query.replace("\n"," ")
-#     data = {'statements': [ 
-#         {'statement': query, 
-#         'resultDataContents': ['graph']}]
-#     }
-#     logger.info(data)
-#     DATABASE = db
-#     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
-#     logger.info(endpoint)
-#     r = requests.post(endpoint, \
-#         headers = {'Content-type': 'application/json'}, \
-#         json = data, \
-#         auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
-#         )
-#     resp.media=json.loads(r.text)
-# #    print(resp.media)
-#     resp.status_code = r.status_code
-
-    # bolt direct (neo4j+s) working
+    query = "MATCH (n) WITH count(n) as nodes MATCH ()-[r]->() RETURN nodes, count(r) as relationships"
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n) RETURN count(n) as nodes").data()
-    except Exception as e:
-        logger.error(e)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        graph = q.run(query,False)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
         resp.status_code = api.status_codes.HTTP_503    
 
 @api.route("/databases")
@@ -895,7 +978,7 @@ def databases(req,resp):
     """List databases available via this webservice.
     ---
     get:
-        summary: All databases
+        summary: List of databases
         description: Respond with all feed values required for experience
         responses:
             200:
@@ -903,9 +986,14 @@ def databases(req,resp):
             503:
                 description: Temporary service issue. Try again later
     """
+
+    query = "SHOW DATABASES"
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name="system",auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("SHOW DATABASES").data()
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, "neo4j")
+        graph = q.run(query,False)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503  
 

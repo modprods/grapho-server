@@ -73,9 +73,9 @@ def test_handle(api):
 #      r = api.requests.get("/orphanednodes/apnic")
 #      assert r.status_code == 200
 
-# def test_statistics(api):
-#      r = api.requests.get("/statistics/apnic")
-#      assert r.status_code == 200
+def test_statistics(api):
+     r = api.requests.get("/statistics/apnic")
+     assert r.status_code == 200
 
 def test_databases(api):
      r = api.requests.get("/databases")
