@@ -378,7 +378,7 @@ def api_dialogue(req,resp,*, db):
     ---
     get:
         summary: Dialogue nodes
-        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        description: Dialogue specific nodes only.
         parameters:
          - in: path
            name: db
@@ -416,8 +416,8 @@ def api_game(req,resp,*, db):
     """Subgraph intended for use in game engine.
     ---
     get:
-        summary: Game specific nodes
-        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        summary: Game dataset
+        description: Returns entire graph for offline use - USE WITH CARE!
         parameters:
          - in: path
            name: db
@@ -454,7 +454,7 @@ RETURN n,r
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/ipv4/{db}/{addr}/{length}")
+# @api.route("/ipv4/{db}/{addr}/{length}")
 def api_ipv4(req,resp,*, db, addr,length):
     """Subgraph showing all about an IPv4 address.
     ---
@@ -522,7 +522,7 @@ RETURN ip4,{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/ipv6/{db}/{addr}/{length}")
+# @api.route("/ipv6/{db}/{addr}/{length}")
 def api_ipv6_roa(req,resp,*, db, addr,length):
     """Subgraph showing all about a ROA auth query for IPv6.
     ---
@@ -585,7 +585,7 @@ RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
+# @api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
 def api_possible_paths(req,resp,*, db, addr1,length1,addr2,length2):
     """Subgraph showing possible paths between two IPv4 adddresses
     ---
@@ -659,7 +659,7 @@ RETURN p{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/asn/{db}/{asn}")
+# @api.route("/asn/{db}/{asn}")
 def api_asn(req,resp,*, db, asn):
     """Subgraph showing all about an ASN address.
     ---
@@ -989,7 +989,7 @@ def databases(req,resp):
     ---
     get:
         summary: List of databases
-        description: Respond with all feed values required for experience
+        description: Returns what databases accessible to this user
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -1008,12 +1008,12 @@ def databases(req,resp):
     except:
         resp.status_code = api.status_codes.HTTP_503  
 
-@api.route("/twitter")
+# @api.route("/twitter")
 def twtter(req,resp):
     response = RedirectResponse(url='/all/twitter')
 
 
-@api.route("/neighbour_asn_diffcountry/{db}")
+# @api.route("/neighbour_asn_diffcountry/{db}")
 def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
@@ -1053,7 +1053,7 @@ RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/asn_by_country/{db}/{country}")
+# @api.route("/asn_by_country/{db}/{country}")
 def api_apnic_asn_by_country(req,resp,*,db,country):
     """All data for experience. Selection of database slug in API
     ---
@@ -1098,7 +1098,7 @@ MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/connected_contacts/{db}/{contact}")
+# @api.route("/connected_contacts/{db}/{contact}")
 def api_apnic_connected_contacts(req,resp,*,db,contact):
     """All data for experience. Selection of database slug in API
     ---
@@ -1151,7 +1151,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/adjacent_asn_subgraph/{db}/{asn}")
+# @api.route("/adjacent_asn_subgraph/{db}/{asn}")
 def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
     """All data for experience. Selection of database slug in API
     ---
@@ -1210,7 +1210,7 @@ def api_fixed_queries(req,resp):
     ---
     get:
         summary: Fixed queries
-        description: List of queries that are hardcoded in API and returned by /all query alongside database stored Handles
+        description: Returns any hardcoded queries in API and returned by /all query alongside database stored Handles
         responses:
             200:
                 description: Respond with all feed values required for experience
