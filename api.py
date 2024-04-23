@@ -10,15 +10,15 @@ load_dotenv(verbose=True,override=True)
 import os
 
 import time
-from py2neo import Graph
+#from py2neo import Graph
 from query import GraphQuery
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -70,7 +70,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.3"
+API_VERSION = "1.4"
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -146,16 +146,25 @@ def api_all_database(req,resp,*,db):
     if DATABASE == 'groove':
         lod = 2
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
-    for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
-      label = handle['properties']['label']
-      handle_id = int(handle['id'])
-      logger.debug(label)
-      r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
-        PUBLIC_URL, DATABASE,handle_id,lod)
-      )
-      g = r.json()['results'][0]['data'][0]['graph']
-      g['handle_id'] = handle_id
-      graphs.append(g)
+    try:
+        for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
+          label = handle['properties']['label']
+          handle_id = int(handle['id'])
+          logger.debug(label)
+          r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
+            PUBLIC_URL, DATABASE,handle_id,lod)
+          )
+          g = r.json()['results'][0]['data'][0]['graph']
+          g['handle_id'] = handle_id
+          graphs.append(g)
+    except TypeError:
+        resp.status_code = api.status_codes.HTTP_503
+        data = dict(
+            message="Invalid API request",
+            error_code=503
+        )
+        resp.media = data
+        return 
     handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
     handle_relationship_id = 100000000  
     if INCLUDE_FIXED_QUERIES == True: # ??? WHY not just if INCLUDE_FIXED_QUERIES
@@ -200,10 +209,11 @@ def api_all_database(req,resp,*,db):
     if INCLUDE_ADDITIONAL_DIALOGUE:
         dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
         additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
+    else:
+        additional_dialogue = []
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
-        neo4j_api=NEO4J_API,
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
@@ -989,7 +999,8 @@ def databases(req,resp):
 
     query = "SHOW DATABASES"
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, "neo4j")
+        # NOTE hardcoded to demo - otherwise should be neo4j
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, "demo")
         graph = q.run(query,False)
         # logger.debug(graph)
         resp.media = json.loads(graph)

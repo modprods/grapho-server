@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 pytest = "*"
 squarify = "*"
-"py2neo" = "*"
 pandas = "*"
 update = "*"
 wordcloud = "*"
@@ -22,12 +21,14 @@ lxml = "*"
 apistar = "*"
 responder = "*"
 typesystem = "==0.2.5"
-neo4j = "*"
+neo4j = "==5.0.1"
+setuptools = "*"
+pip = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.7"
+python_version = "3.9"
 
 [pipenv]
 allow_prereleases = false
