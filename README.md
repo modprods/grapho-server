@@ -43,15 +43,19 @@ Once you have your graph database set up you can amend the test_api.py file with
 ```
     pytest
 ```
+
+NOTE test suite uses the same server and database atm
+
 ## Environment settings
 ```
 NEO4J_HOST = "neo4j-server.domain"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "neo4j"
+NEO4J_USER = "demo"
+NEO4J_PASSWORD = "graphodemo"
 NEO4J_PORT_HTTP = 443
 NEO4J_PORT_BOLT = 7687
 NEO4J_DATABASE = "neo4j"
-PUBLIC_URL = "https://api.grapho.app"
+# uncomment the following to ignore db parameter and always use this database
+PUBLIC_URL = "api-server.domain"
 QUERY_LIMIT = 300
 INCLUDE_FIXED_QUERIES = False
 ```
@@ -81,4 +85,4 @@ FIXED_QUERIES = [
 Grapho licensees, see your Rack&Pin documentation for further detail
 
 
-(C) 2023 Mod Productions Pty Ltd
+(C) 2024 Mod Productions Pty Ltd
