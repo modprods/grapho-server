@@ -148,7 +148,11 @@ def api_all_database(req,resp,*,db):
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
     try:
         for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
-          label = handle['properties']['label']
+          try:
+            label = handle['properties']['label']
+          except KeyError as e:
+            logger.error("TODO - fix dependency on label property")
+            label = handle['properties']['name']
           handle_id = int(handle['id'])
           logger.debug(label)
           r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
