@@ -1003,8 +1003,8 @@ def databases(req,resp):
 
     query = "SHOW DATABASES"
     try:
-        # NOTE hardcoded to demo - otherwise should be neo4j
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, "demo")
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, NEO4J_USER)
         graph = q.run(query,False)
         # logger.debug(graph)
         resp.media = json.loads(graph)
