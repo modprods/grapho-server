@@ -1,24 +1,28 @@
-import responder
-import requests
-from requests.auth import HTTPBasicAuth
-from marshmallow import Schema, fields
-import graphene
 import json
-from starlette.responses import PlainTextResponse, RedirectResponse
-from dotenv import load_dotenv
-load_dotenv(verbose=True,override=True)
-import os
+import urllib.parse
 
+import graphene
+import requests
+import responder
+from dotenv import load_dotenv
+from marshmallow import Schema, fields
+from requests.auth import HTTPBasicAuth
+from starlette.responses import PlainTextResponse, RedirectResponse
+
+load_dotenv(verbose=True,override=True)
+import logging
+import os
 import time
+
 #from py2neo import Graph
 from query import GraphQuery
+from tools import generate_grapho_id
 
-import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -42,7 +46,7 @@ logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
-logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
 
 # Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
@@ -59,18 +63,21 @@ FIXED_QUERIES = [
 
 # logger.info(type(INCLUDE_FIXED_QUERIES))
 
-if int(NEO4J_PORT_HTTP) == 7474:
-    logger.info("dev API instance running")
-    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
-else:
-    logger.info("live API instance running")
-    NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
-
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
 API_VERSION = "1.4"
+
+logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
+
+if int(NEO4J_PORT_HTTP) == 7474:
+    logger.info("dev API instance")
+    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
+else:
+    logger.info("live API instance")
+    NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
+
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -94,9 +101,9 @@ class Query(graphene.ObjectType):
         return f"Hello {name}"
 
 schema = graphene.Schema(query=Query)
-view = responder.ext.GraphQLView(api=api, schema=schema)
+# view = GraphQLView(api=api, schema=schema)
 
-api.add_route("/graph", view)
+# api.add_route("/graph", view)
 
 pages = []
 
@@ -145,23 +152,47 @@ def api_all_database(req,resp,*,db):
     lod = 1 # default is 1
     if DATABASE == 'groove':
         lod = 2
+    logger.debug('Handles API request: {0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
     handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
     try:
         for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
-          try:
-            label = handle['properties']['label']
-          except KeyError as e:
-            logger.error("TODO - fix dependency on label property")
-            label = handle['properties']['name']
-          handle_id = int(handle['id'])
-          logger.debug(label)
-          r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
+            logger.debug(handle)
+            try:
+                label = handle['properties']['label']
+            except KeyError as e:
+                logger.error("TODO - fix dependency on label property")
+                label = handle['properties']['name']
+            try:
+                handle_id = int(handle['id'])
+                logger.debug(f"Neo4j v4.4 or lower detected: {handle_id}")
+                handle_request = '{0}/handle/{1}/{2}/{3}'.format(
             PUBLIC_URL, DATABASE,handle_id,lod)
-          )
-          g = r.json()['results'][0]['data'][0]['graph']
-          g['handle_id'] = handle_id
-          graphs.append(g)
-    except TypeError:
+                logger.debug(f'Label: {label}')
+                logger.debug(f'Id: {handle_id}')
+                logger.debug(handle_request)
+                logger.debug(handle_data)
+                r = requests.get(handle_request)
+            except Exception as e:
+                handle_id = handle['id']
+                logger.debug(e)
+                logger.debug(f"Neo4j 5 id detected: {handle_id} - integer ids deprecated")
+                handle_data = {
+                    'id': handle_id,
+                    'lod': lod,
+                    'db': DATABASE
+                }
+                handle_request = '{0}handle'.format(
+            PUBLIC_URL)
+                logger.debug(f'Label: {label}')
+                logger.debug(f'Id: {handle_id}')
+                logger.debug(handle_request)
+                logger.debug(handle_data)
+                r = requests.post(handle_request,json=handle_data)
+            g = r.json()['results'][0]['data'][0]['graph']
+            g['handle_id'] = handle_id
+            graphs.append(g)
+    except Exception as e:
+        logger.debug(e)
         resp.status_code = api.status_codes.HTTP_503
         data = dict(
             message="Invalid API request",
@@ -831,12 +862,12 @@ def request_handles_database(req,resp,*,db):
          default: neo4j
         description: The database name
     """
-    query = 'MATCH (n:Handle) RETURN n LIMIT 25'
-
+    query = 'MATCH (n:Handle) RETURN n,ID(n) LIMIT 25'
+    logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
-        # logger.debug(graph)
+        logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
@@ -845,7 +876,7 @@ def request_handles_database(req,resp,*,db):
 
 @api.route("/handle/{db}/{id}/{lod}")
 def request_handle_database(req,resp,*, db, id, lod):
-    """Subgraph referenced by handle.
+    """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
     ---
     get:
         summary: Handle lookup
@@ -898,6 +929,66 @@ def request_handle_database(req,resp,*, db, id, lod):
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
+@api.route("/handle")
+async def request_handle_database_v5(req,resp):
+    """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
+    ---
+    post:
+        summary: Handle lookup for Neo4j v5
+        description: Respond with all feed values required for a handle given DATABASE, ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        parameters:
+         - in: path
+           name: elementid
+           required: true
+           schema:
+            type: string
+            default: 4:b1b34cd3-b9a1-456e-89ed-4359603f8be7:354
+           description: The handle ID
+         - in: path
+           name: lod
+           required: false
+           schema:
+            type: integer
+            minimum: 0
+            default: 1
+           description: The level of detail (LOD) to return
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: neo4j
+           description: The database name                      
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    logger.debug("request_handle_database_v5")
+    data = await req.media()
+    logger.debug(data)
+    id = data['id']
+    lod = data['lod']
+    db = data['db']
+    query = f"\
+        MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+        WHERE elementid(a)='{id}'{chr(10)}\
+        UNWIND (nodes(path)) as n{chr(10)}\
+        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+        WHERE NOT (b:Handle AND NOT elementid(b)='{id}'){chr(10)}\
+        RETURN collect(nodes(path2)), collect(relationships(path2))"
+
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        logger.debug(query)
+        graph = q.run(query)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 #@api.route("/connectednodes/{db}")
 def connectednodes(req,resp,*,db):
@@ -1004,9 +1095,9 @@ def databases(req,resp):
     query = "SHOW DATABASES"
     try:
         # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, NEO4J_USER)
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
         graph = q.run(query,False)
-        # logger.debug(graph)
+        logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except:

@@ -88,7 +88,7 @@ class GraphQuery:
         logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
             n = dict(
-                id = i.element_id,
+                id = i.id,
                 labels = list(i.labels),
                 properties = dict(i.items())
             )
@@ -96,10 +96,10 @@ class GraphQuery:
         logger.debug(f"{len(result.relationships)} relationships")
         for i in result.relationships:
             r = dict(
-                id = i.element_id,
+                id = i.id,
                 type = i.type,
-                startNode = i.nodes[0].element_id,
-                endNode = i.nodes[1].element_id,
+                startNode = i.nodes[0].id, # this is deprecated (need to shift to element_id)
+                endNode = i.nodes[1].id,
                 properties = dict(i.items())
             )
             relationships.append(r)
