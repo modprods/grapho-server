@@ -152,8 +152,9 @@ def api_all_database(req,resp,*,db):
     lod = 1 # default is 1
     if DATABASE == 'groove':
         lod = 2
-    logger.debug('Handles API request: {0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
-    handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
+    handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
+    logger.debug(f'Handles API request: {handles_request}')
+    handles = requests.get(handles_request)
     try:
         for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
             logger.debug(handle)
@@ -164,35 +165,29 @@ def api_all_database(req,resp,*,db):
                 label = handle['properties']['name']
             try:
                 handle_id = int(handle['id'])
-                logger.debug(f"Neo4j v4.4 or lower detected: {handle_id}")
+                logger.warning(f"Neo4j integer id deprecated - need to change to string: {handle_id}")
                 handle_request = '{0}/handle/{1}/{2}/{3}'.format(
             PUBLIC_URL, DATABASE,handle_id,lod)
-                logger.debug(f'Label: {label}')
-                logger.debug(f'Id: {handle_id}')
-                logger.debug(handle_request)
-                logger.debug(handle_data)
                 r = requests.get(handle_request)
-            except Exception as e:
+            except ValueError as ex:
                 handle_id = handle['id']
-                logger.debug(e)
-                logger.debug(f"Neo4j 5 id detected: {handle_id} - integer ids deprecated")
-                handle_data = {
-                    'id': handle_id,
-                    'lod': lod,
-                    'db': DATABASE
-                }
-                handle_request = '{0}handle'.format(
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                logger.error(message)
+                logger.error(f"Neo4j 5 new id detected: {handle_id} - not ready to support yet")
+                handle_request = '{0}/handle'.format(
             PUBLIC_URL)
                 logger.debug(f'Label: {label}')
                 logger.debug(f'Id: {handle_id}')
                 logger.debug(handle_request)
-                logger.debug(handle_data)
                 r = requests.post(handle_request,json=handle_data)
             g = r.json()['results'][0]['data'][0]['graph']
             g['handle_id'] = handle_id
             graphs.append(g)
-    except Exception as e:
-        logger.debug(e)
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(ex).__name__, ex.args)
+        logger.warning(message)
         resp.status_code = api.status_codes.HTTP_503
         data = dict(
             message="Invalid API request",
