@@ -54,11 +54,17 @@ INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"Fals
 
 FIXED_QUERIES = [
     {
-        "url": '{0}/asn_by_country/{1}/FJ'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASNs in Fiji',
-        "slug": 'asn_fj'
+        "url": '{0}/top_betweenness/10'.format(
+    PUBLIC_URL),
+        "label": 'Top Betweenness',
+        "slug": 'top_betweenness'
     },
+    # {
+    #     "url": '{0}/top_node_similarity/10'.format(
+    # PUBLIC_URL),
+    #     "label": 'Top Similarity',
+    #     "slug": 'top_similarity'
+    # },
 ]
 
 # logger.info(type(INCLUDE_FIXED_QUERIES))
@@ -235,7 +241,38 @@ def api_all_database(req,resp,*,db):
                 g["handle_id"] = handle_node_id
                 graphs.append(g)
             except TypeError:
-                logger.error(f"Fixed Query error for {f['url']}")
+                logger.warning(f"Fixed Query error for {f['url']} - no 'results'")
+                try:
+                    if 'node' in r.json()[0]:
+                        logger.debug("Try to parse as GDS result")
+                        for subgraph in r.json():
+                            nodes.append(subgraph['node'])
+                        # TODO fix break of DRY
+                        handle_node = dict(
+                                id=handle_node_id,
+                                labels = ["Handle"],
+                                properties= {
+                                    "label": f["label"],
+                                    "slug": f["slug"]
+                                }
+                        )
+                        nodes.append(handle_node)
+                        g["nodes"] = nodes
+                        handle_relationship = dict(
+                                id=handle_relationship_id,
+                                type="NEXT",
+                                startNode=str(handle_node_id),
+                                endNode=str(nodes[0]['id']),
+                                properties= {
+                                }
+                        )
+                        relationships.append(handle_relationship)
+                        g["relationships"] = relationships
+                        g["handle_id"] = handle_node_id
+                        graphs.append(g)
+                except TypeError:
+                    logger.warning(f"Fixed Query error for {f['url']} - no 'node' (GDS) format")
+
     if INCLUDE_ADDITIONAL_DIALOGUE:
         dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
         additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
@@ -1103,6 +1140,7 @@ def twtter(req,resp):
     response = RedirectResponse(url='/all/twitter')
 
 
+
 # @api.route("/neighbour_asn_diffcountry/{db}")
 def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
     """All data for experience. Selection of database slug in API
@@ -1312,6 +1350,96 @@ def api_fixed_queries(req,resp):
     else:
         resp.media = {}
     resp.status_code = 200
+
+@api.route("/top_betweenness/{limit}")
+def api_top_betweenness(req,resp,*,limit):
+    """Return Neo4j gds.betweeness results on peopleGraph projection.
+    ---
+    get:
+        summary: Top betweeness results
+        description: Return Neo4j gds.betweeness results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: limit
+               required: true
+               schema:
+                type: integer
+                minimum: 1
+                default: 10
+    """
+
+    query = f"""
+CALL gds.betweenness.stream(
+"personGraph"
+)
+YIELD
+  nodeId,
+  score 
+WITH gds.util.asNode(nodeId) AS node, score
+RETURN {{
+    id: id(node),
+    labels: labels(node),
+    properties: properties(node),
+    score: score
+}} AS node ORDER by score DESC LIMIT {limit}
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        graph = q.run(query,False)
+        logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
+
+@api.route("/top_node_similarity/{limit}")
+def api_top_node_similarity(req,resp,*,limit):
+    """Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+    ---
+    get:
+        summary: Top node similarity results
+        description: Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: limit
+               required: true
+               schema:
+                type: integer
+                minimum: 1
+                default: 10
+    """
+
+    query = f"""
+CALL gds.nodeSimilarity.stream(
+'personGraph'
+) YIELD
+  node1,
+  node2,
+  similarity
+WITH node1, node2, similarity
+MATCH (n),(o) WHERE ID(n)= node1 AND ID(o) = node2
+RETURN n, o ORDER by similarity DESC LIMIT  {limit}
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        graph = q.run(query,False)
+        logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
