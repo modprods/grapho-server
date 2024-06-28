@@ -59,6 +59,13 @@ FIXED_QUERIES = [
         "label": 'Top Betweenness',
         "slug": 'top_betweenness'
     },
+    {
+        "url": '{0}/up_next'.format(
+    PUBLIC_URL),
+        "label": 'Up Next',
+        "slug": 'Up Next'
+    },
+
     # {
     #     "url": '{0}/top_node_similarity/10'.format(
     # PUBLIC_URL),
@@ -234,6 +241,7 @@ def api_all_database(req,resp,*,db):
                         startNode=str(handle_node_id),
                         endNode=str(nodes[0]['id']),
                         properties= {
+                            'visible': True
                         }
                 )
                 relationships.append(handle_relationship)
@@ -1435,6 +1443,43 @@ RETURN n, o ORDER by similarity DESC LIMIT  {limit}
         # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
         graph = q.run(query,False)
+        logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
+
+@api.route("/up_next")
+def api_up_next(req,resp):
+    """Return Neo4j Time label node based on current time
+    ---
+    get:
+        summary: Top node similarity results
+        description: Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+
+    query = """
+WITH datetime() AS currentDateTime
+MATCH (startNode:Time)
+WHERE startNode.datetime > currentDateTime
+WITH startNode
+ORDER BY startNode.datetime
+LIMIT 1
+MATCH path = (startNode)-[:NEXT*]->(nextNode:Time)
+UNWIND (nodes(path)) as n
+WITH n MATCH path2 = (n)-[*0..1]-(b:Event|Time)
+RETURN collect(nodes(path2)), collect(relationships(path2))
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        # TODO document "True in run" below as WASTED HOURS with this off!!
+        graph = q.run(query,True)
         logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
