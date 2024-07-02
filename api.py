@@ -208,8 +208,8 @@ def api_all_database(req,resp,*,db):
         )
         resp.media = data
         return 
-    handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
-    handle_relationship_id = 100000000  
+    handle_node_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
+    handle_relationship_id = 200000  
     if INCLUDE_FIXED_QUERIES == True: # ??? WHY not just if INCLUDE_FIXED_QUERIES
         for f in FIXED_QUERIES:
             handle_node_id = handle_node_id + 1
@@ -1480,7 +1480,7 @@ RETURN collect(nodes(path2)), collect(relationships(path2))
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
         # TODO document "True in run" below as WASTED HOURS with this off!!
         graph = q.run(query,True)
-        logger.debug(graph)
+        # logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except:

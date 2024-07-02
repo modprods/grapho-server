@@ -64,8 +64,8 @@ class GraphQuery:
     @staticmethod
     @unit_of_work(timeout=1) # not working
     def _read_query(tx, query, path,graph):
-        logger.debug('_read_query')
-        logger.debug(query)
+        # logger.debug('_read_query')
+        # logger.debug(query)
      #   query = query.replace("\n"," ")
         # for queries where not expecting a graph result, simpler result set
         if not graph:
@@ -85,7 +85,7 @@ class GraphQuery:
 
         # for i in result:
         #     logger.debug(i)
-        logger.debug(f"{len(result.nodes)} nodes")
+        # logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
             n = dict(
                 id = i.id,
