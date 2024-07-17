@@ -902,7 +902,9 @@ def request_handles_database(req,resp,*,db):
          default: neo4j
         description: The database name
     """
-    query = 'MATCH (n:Handle) RETURN n,ID(n) LIMIT 25'
+    query = '''
+MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
+'''
     logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
@@ -1470,7 +1472,7 @@ WHERE startNode.datetime > currentDateTime
 WITH startNode
 ORDER BY startNode.datetime
 LIMIT 1
-MATCH path = (startNode)-[:NEXT*]->(nextNode:Time)
+MATCH path = (startNode)-[:NEXT*2]->(nextNode:Time)
 UNWIND (nodes(path)) as n
 WITH n MATCH path2 = (n)-[*0..1]-(b:Event|Time)
 RETURN collect(nodes(path2)), collect(relationships(path2))
