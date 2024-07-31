@@ -1466,7 +1466,7 @@ def api_up_next(req,resp):
     """
 
     query = """
-WITH datetime() AS currentDateTime
+WITH datetime({timezone: 'Europe/Berlin'}) AS currentDateTime
 MATCH (startNode:Time)
 WHERE startNode.datetime > currentDateTime
 WITH startNode
