@@ -163,8 +163,8 @@ def api_all_database(req,resp,*,db):
     DATABASE = db
     # LOD sets default number of neighbours to include in handles
     lod = 1 # default is 1
-    if DATABASE == 'groove':
-        lod = 2
+   # if DATABASE == 'groove':
+   #     lod = 2
     handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
     logger.debug(f'Handles API request: {handles_request}')
     handles = requests.get(handles_request)
