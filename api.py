@@ -33,6 +33,7 @@ ch.setFormatter(formatter)
 
 # add ch to logger
 logger.addHandler(ch)
+logger.propagate = False
 
 from pathlib import Path
 
@@ -48,6 +49,11 @@ QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
 logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
+
+LOG_LEVEL = os.getenv('LOG_LEVEL')
+if LOG_LEVEL == "DEBUG":
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
 
 # Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
 # Grapho supports Handles stored in DB, API, UE Map, and overall Project 
@@ -85,12 +91,11 @@ API_VERSION = "1.4"
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
 
 if int(NEO4J_PORT_HTTP) == 7474:
-    logger.info("dev API instance")
     NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
+    logger.info(f"dev API instance\n{NEO4J_API}")
 else:
-    logger.info("live API instance")
     NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
-
+    logger.info(f"live API instance\n{NEO4J_API}")
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
