@@ -47,7 +47,7 @@ logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
-logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
 
 LOG_LEVEL = os.getenv('LOG_LEVEL')
@@ -59,18 +59,18 @@ if LOG_LEVEL == "DEBUG":
 # Grapho supports Handles stored in DB, API, UE Map, and overall Project 
 
 FIXED_QUERIES = [
-    {
-        "url": '{0}/top_betweenness/10'.format(
-    PUBLIC_URL),
-        "label": 'Top Betweenness',
-        "slug": 'top_betweenness'
-    },
+    # {
+    #     "url": '{0}/top_betweenness/10'.format(
+    # PUBLIC_URL),
+    #     "label": 'Top Betweenness',
+    #     "slug": 'top_betweenness'
+    # },
     {
         "url": '{0}/up_next'.format(
     PUBLIC_URL),
         "label": 'Up Next',
         "slug": 'Up Next'
-    },
+    }
 
     # {
     #     "url": '{0}/top_node_similarity/10'.format(
@@ -89,6 +89,7 @@ API_COPYRIGHT = "All Rights Reserved"
 API_VERSION = "1.4"
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
+logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 
 if int(NEO4J_PORT_HTTP) == 7474:
     NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
@@ -215,7 +216,7 @@ def api_all_database(req,resp,*,db):
         return 
     handle_node_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
     handle_relationship_id = 200000  
-    if INCLUDE_FIXED_QUERIES == True: # ??? WHY not just if INCLUDE_FIXED_QUERIES
+    if INCLUDE_FIXED_QUERIES: # ??? WHY not just if INCLUDE_FIXED_QUERIES
         for f in FIXED_QUERIES:
             handle_node_id = handle_node_id + 1
             handle_relationship_id = handle_relationship_id + 1
@@ -1471,7 +1472,7 @@ def api_up_next(req,resp):
     """
 
     query = """
-WITH datetime({timezone: 'Europe/Berlin'}) AS currentDateTime
+WITH datetime({timezone: 'Europe/London'}) AS currentDateTime
 MATCH (startNode:Time)
 WHERE startNode.datetime > currentDateTime
 WITH startNode
