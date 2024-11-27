@@ -244,10 +244,9 @@ def api_all_database(req,resp,*,db):
                 handle_relationship = dict(
                         id=handle_relationship_id,
                         type="NEXT",
-                        startNode=str(handle_node_id),
-                        endNode=str(nodes[0]['id']),
+                        startNode=handle_node_id,
+                        endNode=nodes[0]['id'],
                         properties= {
-                            'visible': True
                         }
                 )
                 relationships.append(handle_relationship)
@@ -1140,7 +1139,7 @@ def databases(req,resp):
                 description: Temporary service issue. Try again later
     """
 
-    query = "SHOW DATABASES"
+    query = "show databases where requestedStatus = 'online' and type = 'standard'"
     try:
         # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
