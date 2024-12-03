@@ -43,7 +43,11 @@ from neo4j import GraphDatabase, unit_of_work
 
 class GraphQuery:
     def __init__(self, uri, user, password, req, database = None):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.driver = GraphDatabase.driver(
+                uri,
+                auth=(user, password),
+                connection_timeout=60
+        )
         self.path = req.url.path
         # rules for overriding database selection
         if NEO4J_DATABASE:  # override all queries based on environment
@@ -62,7 +66,7 @@ class GraphQuery:
             return results
 
     @staticmethod
-    @unit_of_work(timeout=1) # not working
+    @unit_of_work(timeout=30) # client timeout
     def _read_query(tx, query, path,graph):
         # logger.debug('_read_query')
         # logger.debug(query)
