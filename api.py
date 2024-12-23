@@ -142,7 +142,7 @@ class HandleSchema(Schema):
     label = fields.Str()
 
 @api.route("/all/{db}")
-async def api_all_database(req,resp,*,db):
+def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
