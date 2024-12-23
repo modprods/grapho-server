@@ -142,7 +142,7 @@ class HandleSchema(Schema):
     label = fields.Str()
 
 @api.route("/all/{db}")
-def api_all_database(req,resp,*,db):
+async def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -395,7 +395,7 @@ propData.existence as existenceConstraint"
         resp.status_code = api.status_codes.HTTP_503 
 
 @api.route("/neighbours/{db}/{node_id}/{distance}")
-def api_neighbours(req,resp,*, db, node_id, distance):
+async def api_neighbours(req,resp,*, db, node_id, distance):
     """Subgraph comprising neighbours of specified node.
     ---
     get:
@@ -451,6 +451,7 @@ LIMIT {QUERY_LIMIT}"
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 @api.route("/dialogue/{db}")
 def api_dialogue(req,resp,*, db):
@@ -490,6 +491,7 @@ LIMIT {QUERY_LIMIT}"
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 @api.route("/game/{db}")
 def api_game(req,resp,*, db):
@@ -533,6 +535,7 @@ RETURN n,r
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 # @api.route("/ipv4/{db}/{addr}/{length}")
 def api_ipv4(req,resp,*, db, addr,length):
@@ -871,7 +874,7 @@ def neo4j_query(query):
     return(json,r.status_code)
 
 @api.route("/handles/{db}")
-def request_handles_database(req,resp,*,db):
+async def request_handles_database(req,resp,*,db):
     """All handles.
     ---
     get:
@@ -919,10 +922,11 @@ MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503 
+        resp.status_code = api.status_codes.HTTP_503
+    q.close() 
 
 @api.route("/handle/{db}/{id}/{lod}")
-def request_handle_database(req,resp,*, db, id, lod):
+async def request_handle_database(req,resp,*, db, id, lod):
     """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
     ---
     get:
@@ -975,6 +979,7 @@ def request_handle_database(req,resp,*, db, id, lod):
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 @api.route("/handle")
 async def request_handle_database_v5(req,resp):
@@ -1094,7 +1099,7 @@ def orphanednodes(req,resp,*, db):
         resp.status_code = api.status_codes.HTTP_503  
 
 @api.route("/statistics/{db}")
-def statistics(req,resp,*,db):
+async def statistics(req,resp,*,db):
     """Statistics for this database.
     ---
     get:
@@ -1124,9 +1129,10 @@ def statistics(req,resp,*,db):
         resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503    
+    q.close()
 
 @api.route("/databases")
-def databases(req,resp):
+async def databases(req,resp):
     """List databases available via this webservice.
     ---
     get:
@@ -1149,15 +1155,16 @@ def databases(req,resp):
         resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503  
+    q.close()
 
 # @api.route("/twitter")
-def twtter(req,resp):
+async def twtter(req,resp):
     response = RedirectResponse(url='/all/twitter')
 
 
 
 # @api.route("/neighbour_asn_diffcountry/{db}")
-def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
+async def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1197,7 +1204,7 @@ RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
         resp.status_code = api.status_codes.HTTP_503
 
 # @api.route("/asn_by_country/{db}/{country}")
-def api_apnic_asn_by_country(req,resp,*,db,country):
+async def api_apnic_asn_by_country(req,resp,*,db,country):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1242,7 +1249,7 @@ MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
         resp.status_code = api.status_codes.HTTP_503
 
 # @api.route("/connected_contacts/{db}/{contact}")
-def api_apnic_connected_contacts(req,resp,*,db,contact):
+async def api_apnic_connected_contacts(req,resp,*,db,contact):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1295,7 +1302,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         resp.status_code = api.status_codes.HTTP_503
 
 # @api.route("/adjacent_asn_subgraph/{db}/{asn}")
-def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
+async def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1348,7 +1355,7 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
 
 
 @api.route("/fixed_queries")
-def api_fixed_queries(req,resp):
+async def api_fixed_queries(req,resp):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1367,7 +1374,7 @@ def api_fixed_queries(req,resp):
     resp.status_code = 200
 
 @api.route("/top_betweenness/{limit}")
-def api_top_betweenness(req,resp,*,limit):
+async def api_top_betweenness(req,resp,*,limit):
     """Return Neo4j gds.betweeness results on peopleGraph projection.
     ---
     get:
@@ -1414,7 +1421,7 @@ RETURN {{
         resp.status_code = api.status_codes.HTTP_503  
 
 @api.route("/top_node_similarity/{limit}")
-def api_top_node_similarity(req,resp,*,limit):
+async def api_top_node_similarity(req,resp,*,limit):
     """Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
     ---
     get:
@@ -1457,7 +1464,7 @@ RETURN n, o ORDER by similarity DESC LIMIT  {limit}
         resp.status_code = api.status_codes.HTTP_503  
 
 @api.route("/up_next")
-def api_up_next(req,resp):
+async def api_up_next(req,resp):
     """Return Neo4j Time label node based on current time
     ---
     get:
@@ -1492,6 +1499,7 @@ RETURN collect(nodes(path2)), collect(relationships(path2))
         resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503  
+    q.close()
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")
