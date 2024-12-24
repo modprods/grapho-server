@@ -42,7 +42,6 @@ graphql-relay = "*"
 h11 = "*"
 httpcore = "*"
 httptools = "*"
-httpx = "*"
 idna = "*"
 iniconfig = "*"
 itsdangerous = "*"
@@ -83,6 +82,7 @@ graphene = "*"
 responder = "*"
 typesystem = "==0.2.5"
 colorama = "*"
+httpx = "*"
 
 [dev-packages]
 

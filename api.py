@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from marshmallow import Schema, fields
 from requests.auth import HTTPBasicAuth
 from starlette.responses import PlainTextResponse, RedirectResponse
+import httpx
 
 load_dotenv(verbose=True,override=True)
 import logging
@@ -141,8 +142,20 @@ class HandleSchema(Schema):
     start_id = fields.Float()
     label = fields.Str()
 
+async def fetch_url(client, url):
+    logger.error(url)
+    response = await client.get(url)
+    return response.json()
+
+async def fetch_all(urls):
+    logger.error(urls)
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_url(client, url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        return results
+
 @api.route("/all/{db}")
-def api_all_database(req,resp,*,db):
+async def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -173,7 +186,9 @@ def api_all_database(req,resp,*,db):
    #     lod = 2
     handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
     logger.debug(f'Handles API request: {handles_request}')
-    handles = requests.get(handles_request)
+    async with httpx.AsyncClient() as client:
+        handles = await client.get(handles_request)
+    # handle_requests = []
     try:
         for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
             logger.debug(handle)
@@ -187,7 +202,11 @@ def api_all_database(req,resp,*,db):
                 logger.warning(f"Neo4j integer id deprecated - need to change to string: {handle_id}")
                 handle_request = '{0}/handle/{1}/{2}/{3}'.format(
             PUBLIC_URL, DATABASE,handle_id,lod)
-                r = requests.get(handle_request)
+                # r = requests.get(handle_request)
+                # refactor for async
+                # handle_requests.append(handle_request)
+                async with httpx.AsyncClient() as client2:
+                    r = await client2.get(handle_request)
             except ValueError as ex:
                 handle_id = handle['id']
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
