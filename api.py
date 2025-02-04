@@ -1,24 +1,29 @@
-import responder
-import requests
-from requests.auth import HTTPBasicAuth
-from marshmallow import Schema, fields
-import graphene
 import json
-from starlette.responses import PlainTextResponse, RedirectResponse
+import urllib.parse
+
+import graphene
+import requests
+import responder
 from dotenv import load_dotenv
+from marshmallow import Schema, fields
+from requests.auth import HTTPBasicAuth
+from starlette.responses import PlainTextResponse, RedirectResponse
+import httpx
+
 load_dotenv(verbose=True,override=True)
-import os
-
-import time
-from py2neo import Graph
-from query import GraphQuery
-
 import logging
+import os
+import time
+
+#from py2neo import Graph
+from query import GraphQuery
+from tools import generate_grapho_id
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,6 +34,7 @@ ch.setFormatter(formatter)
 
 # add ch to logger
 logger.addHandler(ch)
+logger.propagate = False
 
 from pathlib import Path
 
@@ -42,35 +48,56 @@ logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
-logger.info(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
+
+LOG_LEVEL = os.getenv('LOG_LEVEL')
+if LOG_LEVEL == "DEBUG":
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
 
 # Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
 # Grapho supports Handles stored in DB, API, UE Map, and overall Project 
 
 FIXED_QUERIES = [
+    # {
+    #     "url": '{0}/top_betweenness/10'.format(
+    # PUBLIC_URL),
+    #     "label": 'Top Betweenness',
+    #     "slug": 'top_betweenness'
+    # },
     {
-        "url": '{0}/asn_by_country/{1}/FJ'.format(
-    PUBLIC_URL, NEO4J_DATABASE),
-        "label": 'ASNs in Fiji',
-        "slug": 'asn_fj'
-    },
+        "url": '{0}/up_next'.format(
+    PUBLIC_URL),
+        "label": 'Up Next',
+        "slug": 'Up Next'
+    }
+
+    # {
+    #     "url": '{0}/top_node_similarity/10'.format(
+    # PUBLIC_URL),
+    #     "label": 'Top Similarity',
+    #     "slug": 'top_similarity'
+    # },
 ]
 
 # logger.info(type(INCLUDE_FIXED_QUERIES))
-
-if int(NEO4J_PORT_HTTP) == 7474:
-    logger.info("dev API instance running")
-    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
-else:
-    logger.info("live API instance running")
-    NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
 
 API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.3"
+API_VERSION = "1.5"
+
+logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
+logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
+
+if int(NEO4J_PORT_HTTP) == 7474:
+    NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
+    logger.info(f"dev API instance\n{NEO4J_API}")
+else:
+    NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
+    logger.info(f"live API instance\n{NEO4J_API}")
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -94,9 +121,9 @@ class Query(graphene.ObjectType):
         return f"Hello {name}"
 
 schema = graphene.Schema(query=Query)
-view = responder.ext.GraphQLView(api=api, schema=schema)
+# view = GraphQLView(api=api, schema=schema)
 
-api.add_route("/graph", view)
+# api.add_route("/graph", view)
 
 pages = []
 
@@ -115,8 +142,20 @@ class HandleSchema(Schema):
     start_id = fields.Float()
     label = fields.Str()
 
+async def fetch_url(client, url):
+    logger.error(url)
+    response = await client.get(url)
+    return response.json()
+
+async def fetch_all(urls):
+    logger.error(urls)
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_url(client, url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        return results
+
 @api.route("/all/{db}")
-def api_all_database(req,resp,*,db):
+async def api_all_database(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -143,22 +182,60 @@ def api_all_database(req,resp,*,db):
     DATABASE = db
     # LOD sets default number of neighbours to include in handles
     lod = 1 # default is 1
-    if DATABASE == 'groove':
-        lod = 2
-    handles = requests.get('{0}/handles/{1}'.format(PUBLIC_URL,DATABASE))
-    for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
-      label = handle['properties']['label']
-      handle_id = int(handle['id'])
-      logger.debug(label)
-      r = requests.get('{0}/handle/{1}/{2}/{3}'.format(
-        PUBLIC_URL, DATABASE,handle_id,lod)
-      )
-      g = r.json()['results'][0]['data'][0]['graph']
-      g['handle_id'] = handle_id
-      graphs.append(g)
-    handle_node_id = 100000000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
-    handle_relationship_id = 100000000  
-    if INCLUDE_FIXED_QUERIES == True: # ??? WHY not just if INCLUDE_FIXED_QUERIES
+   # if DATABASE == 'groove':
+   #     lod = 2
+    handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
+    logger.debug(f'Handles API request: {handles_request}')
+    async with httpx.AsyncClient() as client:
+        handles = await client.get(handles_request)
+    # handle_requests = []
+    try:
+        for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
+            logger.debug(handle)
+            try:
+                label = handle['properties']['label']
+            except KeyError as e:
+                logger.error("TODO - fix dependency on label property")
+                label = handle['properties']['name']
+            try:
+                handle_id = int(handle['id'])
+                logger.warning(f"Neo4j integer id deprecated - need to change to string: {handle_id}")
+                handle_request = '{0}/handle/{1}/{2}/{3}'.format(
+            PUBLIC_URL, DATABASE,handle_id,lod)
+                # r = requests.get(handle_request)
+                # refactor for async
+                # handle_requests.append(handle_request)
+                async with httpx.AsyncClient() as client2:
+                    r = await client2.get(handle_request)
+            except ValueError as ex:
+                handle_id = handle['id']
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                logger.error(message)
+                logger.error(f"Neo4j 5 new id detected: {handle_id} - not ready to support yet")
+                handle_request = '{0}/handle'.format(
+            PUBLIC_URL)
+                logger.debug(f'Label: {label}')
+                logger.debug(f'Id: {handle_id}')
+                logger.debug(handle_request)
+                r = requests.post(handle_request,json=handle_data)
+            g = r.json()['results'][0]['data'][0]['graph']
+            g['handle_id'] = handle_id
+            graphs.append(g)
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(ex).__name__, ex.args)
+        logger.warning(message)
+        resp.status_code = api.status_codes.HTTP_503
+        data = dict(
+            message="Invalid API request",
+            error_code=503
+        )
+        resp.media = data
+        return 
+    handle_node_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
+    handle_relationship_id = 200000  
+    if INCLUDE_FIXED_QUERIES: # ??? WHY not just if INCLUDE_FIXED_QUERIES
         for f in FIXED_QUERIES:
             handle_node_id = handle_node_id + 1
             handle_relationship_id = handle_relationship_id + 1
@@ -186,8 +263,8 @@ def api_all_database(req,resp,*,db):
                 handle_relationship = dict(
                         id=handle_relationship_id,
                         type="NEXT",
-                        startNode=str(handle_node_id),
-                        endNode=str(nodes[0]['id']),
+                        startNode=handle_node_id,
+                        endNode=nodes[0]['id'],
                         properties= {
                         }
                 )
@@ -196,14 +273,46 @@ def api_all_database(req,resp,*,db):
                 g["handle_id"] = handle_node_id
                 graphs.append(g)
             except TypeError:
-                logger.error(f"Fixed Query error for {f['url']}")
+                logger.warning(f"Fixed Query error for {f['url']} - no 'results'")
+                try:
+                    if 'node' in r.json()[0]:
+                        logger.debug("Try to parse as GDS result")
+                        for subgraph in r.json():
+                            nodes.append(subgraph['node'])
+                        # TODO fix break of DRY
+                        handle_node = dict(
+                                id=handle_node_id,
+                                labels = ["Handle"],
+                                properties= {
+                                    "label": f["label"],
+                                    "slug": f["slug"]
+                                }
+                        )
+                        nodes.append(handle_node)
+                        g["nodes"] = nodes
+                        handle_relationship = dict(
+                                id=handle_relationship_id,
+                                type="NEXT",
+                                startNode=str(handle_node_id),
+                                endNode=str(nodes[0]['id']),
+                                properties= {
+                                }
+                        )
+                        relationships.append(handle_relationship)
+                        g["relationships"] = relationships
+                        g["handle_id"] = handle_node_id
+                        graphs.append(g)
+                except TypeError:
+                    logger.warning(f"Fixed Query error for {f['url']} - no 'node' (GDS) format")
+
     if INCLUDE_ADDITIONAL_DIALOGUE:
         dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
         additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
+    else:
+        additional_dialogue = []
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
-        neo4j_api=NEO4J_API,
         url=PUBLIC_URL,
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
@@ -305,7 +414,7 @@ propData.existence as existenceConstraint"
         resp.status_code = api.status_codes.HTTP_503 
 
 @api.route("/neighbours/{db}/{node_id}/{distance}")
-def api_neighbours(req,resp,*, db, node_id, distance):
+async def api_neighbours(req,resp,*, db, node_id, distance):
     """Subgraph comprising neighbours of specified node.
     ---
     get:
@@ -361,6 +470,7 @@ LIMIT {QUERY_LIMIT}"
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 @api.route("/dialogue/{db}")
 def api_dialogue(req,resp,*, db):
@@ -368,7 +478,7 @@ def api_dialogue(req,resp,*, db):
     ---
     get:
         summary: Dialogue nodes
-        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        description: Dialogue specific nodes only.
         parameters:
          - in: path
            name: db
@@ -400,14 +510,15 @@ LIMIT {QUERY_LIMIT}"
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
 @api.route("/game/{db}")
 def api_game(req,resp,*, db):
     """Subgraph intended for use in game engine.
     ---
     get:
-        summary: Game specific nodes
-        description: Respond with all feed values required for subgraph comprising neighbours of specified node.
+        summary: Game dataset
+        description: Returns entire graph for offline use - USE WITH CARE!
         parameters:
          - in: path
            name: db
@@ -443,8 +554,9 @@ RETURN n,r
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
-@api.route("/ipv4/{db}/{addr}/{length}")
+# @api.route("/ipv4/{db}/{addr}/{length}")
 def api_ipv4(req,resp,*, db, addr,length):
     """Subgraph showing all about an IPv4 address.
     ---
@@ -512,7 +624,7 @@ RETURN ip4,{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/ipv6/{db}/{addr}/{length}")
+# @api.route("/ipv6/{db}/{addr}/{length}")
 def api_ipv6_roa(req,resp,*, db, addr,length):
     """Subgraph showing all about a ROA auth query for IPv6.
     ---
@@ -575,7 +687,7 @@ RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
+# @api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
 def api_possible_paths(req,resp,*, db, addr1,length1,addr2,length2):
     """Subgraph showing possible paths between two IPv4 adddresses
     ---
@@ -649,7 +761,7 @@ RETURN p{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/asn/{db}/{asn}")
+# @api.route("/asn/{db}/{asn}")
 def api_asn(req,resp,*, db, asn):
     """Subgraph showing all about an ASN address.
     ---
@@ -781,7 +893,7 @@ def neo4j_query(query):
     return(json,r.status_code)
 
 @api.route("/handles/{db}")
-def request_handles_database(req,resp,*,db):
+async def request_handles_database(req,resp,*,db):
     """All handles.
     ---
     get:
@@ -817,21 +929,24 @@ def request_handles_database(req,resp,*,db):
          default: neo4j
         description: The database name
     """
-    query = 'MATCH (n:Handle) RETURN n LIMIT 25'
-
+    query = '''
+MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
+'''
+    logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
-        # logger.debug(graph)
+        logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503 
+        resp.status_code = api.status_codes.HTTP_503
+    q.close() 
 
 @api.route("/handle/{db}/{id}/{lod}")
-def request_handle_database(req,resp,*, db, id, lod):
-    """Subgraph referenced by handle.
+async def request_handle_database(req,resp,*, db, id, lod):
+    """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
     ---
     get:
         summary: Handle lookup
@@ -883,7 +998,68 @@ def request_handle_database(req,resp,*, db, id, lod):
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
+    q.close()
 
+@api.route("/handle")
+async def request_handle_database_v5(req,resp):
+    """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
+    ---
+    post:
+        summary: Handle lookup for Neo4j v5
+        description: Respond with all feed values required for a handle given DATABASE, ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
+        parameters:
+         - in: path
+           name: elementid
+           required: true
+           schema:
+            type: string
+            default: 4:b1b34cd3-b9a1-456e-89ed-4359603f8be7:354
+           description: The handle ID
+         - in: path
+           name: lod
+           required: false
+           schema:
+            type: integer
+            minimum: 0
+            default: 1
+           description: The level of detail (LOD) to return
+         - in: path
+           name: db
+           required: true
+           schema:
+            type: string
+            minimum: 1
+            default: neo4j
+           description: The database name                      
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+    logger.debug("request_handle_database_v5")
+    data = await req.media()
+    logger.debug(data)
+    id = data['id']
+    lod = data['lod']
+    db = data['db']
+    query = f"\
+        MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+        WHERE elementid(a)='{id}'{chr(10)}\
+        UNWIND (nodes(path)) as n{chr(10)}\
+        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+        WHERE NOT (b:Handle AND NOT elementid(b)='{id}'){chr(10)}\
+        RETURN collect(nodes(path2)), collect(relationships(path2))"
+
+    try:
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
+        logger.debug(query)
+        graph = q.run(query)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except Exception as e:
+        logger.error(e)
+        resp.status_code = api.status_codes.HTTP_503
 
 #@api.route("/connectednodes/{db}")
 def connectednodes(req,resp,*,db):
@@ -942,7 +1118,7 @@ def orphanednodes(req,resp,*, db):
         resp.status_code = api.status_codes.HTTP_503  
 
 @api.route("/statistics/{db}")
-def statistics(req,resp,*,db):
+async def statistics(req,resp,*,db):
     """Statistics for this database.
     ---
     get:
@@ -972,14 +1148,15 @@ def statistics(req,resp,*,db):
         resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503    
+    q.close()
 
 @api.route("/databases")
-def databases(req,resp):
+async def databases(req,resp):
     """List databases available via this webservice.
     ---
     get:
         summary: List of databases
-        description: Respond with all feed values required for experience
+        description: Returns what databases accessible to this user
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -987,23 +1164,26 @@ def databases(req,resp):
                 description: Temporary service issue. Try again later
     """
 
-    query = "SHOW DATABASES"
+    query = "show databases where requestedStatus = 'online' and type = 'standard'"
     try:
-        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, "neo4j")
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
         graph = q.run(query,False)
-        # logger.debug(graph)
+        logger.debug(graph)
         resp.media = json.loads(graph)
         resp.status_code = api.status_codes.HTTP_200 
     except:
         resp.status_code = api.status_codes.HTTP_503  
+    q.close()
 
-@api.route("/twitter")
-def twtter(req,resp):
+# @api.route("/twitter")
+async def twtter(req,resp):
     response = RedirectResponse(url='/all/twitter')
 
 
-@api.route("/neighbour_asn_diffcountry/{db}")
-def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
+
+# @api.route("/neighbour_asn_diffcountry/{db}")
+async def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1042,8 +1222,8 @@ RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/asn_by_country/{db}/{country}")
-def api_apnic_asn_by_country(req,resp,*,db,country):
+# @api.route("/asn_by_country/{db}/{country}")
+async def api_apnic_asn_by_country(req,resp,*,db,country):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1087,8 +1267,8 @@ MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/connected_contacts/{db}/{contact}")
-def api_apnic_connected_contacts(req,resp,*,db,contact):
+# @api.route("/connected_contacts/{db}/{contact}")
+async def api_apnic_connected_contacts(req,resp,*,db,contact):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1140,8 +1320,8 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
 
-@api.route("/adjacent_asn_subgraph/{db}/{asn}")
-def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
+# @api.route("/adjacent_asn_subgraph/{db}/{asn}")
+async def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
     """All data for experience. Selection of database slug in API
     ---
     get:
@@ -1194,12 +1374,12 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
 
 
 @api.route("/fixed_queries")
-def api_fixed_queries(req,resp):
+async def api_fixed_queries(req,resp):
     """All data for experience. Selection of database slug in API
     ---
     get:
         summary: Fixed queries
-        description: List of queries that are hardcoded in API and returned by /all query alongside database stored Handles
+        description: Returns any hardcoded queries in API and returned by /all query alongside database stored Handles
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -1211,6 +1391,134 @@ def api_fixed_queries(req,resp):
     else:
         resp.media = {}
     resp.status_code = 200
+
+@api.route("/top_betweenness/{limit}")
+async def api_top_betweenness(req,resp,*,limit):
+    """Return Neo4j gds.betweeness results on peopleGraph projection.
+    ---
+    get:
+        summary: Top betweeness results
+        description: Return Neo4j gds.betweeness results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: limit
+               required: true
+               schema:
+                type: integer
+                minimum: 1
+                default: 10
+    """
+
+    query = f"""
+CALL gds.betweenness.stream(
+"personGraph"
+)
+YIELD
+  nodeId,
+  score 
+WITH gds.util.asNode(nodeId) AS node, score
+RETURN {{
+    id: id(node),
+    labels: labels(node),
+    properties: properties(node),
+    score: score
+}} AS node ORDER by score DESC LIMIT {limit}
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        graph = q.run(query,False)
+        logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
+
+@api.route("/top_node_similarity/{limit}")
+async def api_top_node_similarity(req,resp,*,limit):
+    """Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+    ---
+    get:
+        summary: Top node similarity results
+        description: Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+        parameters:
+             - in: path
+               name: limit
+               required: true
+               schema:
+                type: integer
+                minimum: 1
+                default: 10
+    """
+
+    query = f"""
+CALL gds.nodeSimilarity.stream(
+'personGraph'
+) YIELD
+  node1,
+  node2,
+  similarity
+WITH node1, node2, similarity
+MATCH (n),(o) WHERE ID(n)= node1 AND ID(o) = node2
+RETURN n, o ORDER by similarity DESC LIMIT  {limit}
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        graph = q.run(query,False)
+        logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
+
+@api.route("/up_next")
+async def api_up_next(req,resp):
+    """Return Neo4j Time label node based on current time
+    ---
+    get:
+        summary: Top node similarity results
+        description: Return Neo4j gds.nodeSimilarity results on peopleGraph projection.
+        responses:
+            200:
+                description: Respond with all feed values required for experience
+            503:
+                description: Temporary service issue. Try again later
+    """
+
+    query = """
+WITH datetime({timezone: 'Europe/London'}) AS currentDateTime
+MATCH (startNode:Time)
+WHERE startNode.datetime > currentDateTime
+WITH startNode
+ORDER BY startNode.datetime
+LIMIT 1
+MATCH path = (startNode)-[:NEXT*2]->(nextNode:Time)
+UNWIND (nodes(path)) as n
+WITH n MATCH path2 = (n)-[*0..1]-(b:Event|Time)
+RETURN collect(nodes(path2)), collect(relationships(path2))
+"""
+    try:
+        # NOTE - use Neo4j privileges to ensure NEO4J_USER can only see desired dbs 
+        q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req)
+        # TODO document "True in run" below as WASTED HOURS with this off!!
+        graph = q.run(query,True)
+        # logger.debug(graph)
+        resp.media = json.loads(graph)
+        resp.status_code = api.status_codes.HTTP_200 
+    except:
+        resp.status_code = api.status_codes.HTTP_503  
+    q.close()
 
 if __name__ == "__main__":
     api.run(address="0.0.0.0")

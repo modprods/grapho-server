@@ -5,10 +5,10 @@ import json
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -43,7 +43,11 @@ from neo4j import GraphDatabase, unit_of_work
 
 class GraphQuery:
     def __init__(self, uri, user, password, req, database = None):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.driver = GraphDatabase.driver(
+                uri,
+                auth=(user, password),
+                connection_timeout=60
+        )
         self.path = req.url.path
         # rules for overriding database selection
         if NEO4J_DATABASE:  # override all queries based on environment
@@ -62,10 +66,10 @@ class GraphQuery:
             return results
 
     @staticmethod
-    @unit_of_work(timeout=1) # not working
+    @unit_of_work(timeout=30) # client timeout
     def _read_query(tx, query, path,graph):
-        logger.debug('_read_query')
-        logger.debug(query)
+        # logger.debug('_read_query')
+        # logger.debug(query)
      #   query = query.replace("\n"," ")
         # for queries where not expecting a graph result, simpler result set
         if not graph:
@@ -85,10 +89,10 @@ class GraphQuery:
 
         # for i in result:
         #     logger.debug(i)
-        logger.debug(f"{len(result.nodes)} nodes")
+        # logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
             n = dict(
-                id = i.element_id,
+                id = i.id,
                 labels = list(i.labels),
                 properties = dict(i.items())
             )
@@ -96,10 +100,10 @@ class GraphQuery:
         logger.debug(f"{len(result.relationships)} relationships")
         for i in result.relationships:
             r = dict(
-                id = i.element_id,
+                id = i.id,
                 type = i.type,
-                startNode = i.nodes[0].element_id,
-                endNode = i.nodes[1].element_id,
+                startNode = i.nodes[0].id, # this is deprecated (need to shift to element_id)
+                endNode = i.nodes[1].id,
                 properties = dict(i.items())
             )
             relationships.append(r)
