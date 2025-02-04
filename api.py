@@ -87,7 +87,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.4"
+API_VERSION = "1.5"
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
 logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
