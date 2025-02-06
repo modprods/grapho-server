@@ -929,8 +929,11 @@ async def request_handles_database(req,resp,*,db):
          default: neo4j
         description: The database name
     """
+#     query = '''
+# MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
+# '''
     query = '''
-MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
+MATCH (n:Handle) RETURN n,ID(n)
 '''
     logger.debug(query)
     try:

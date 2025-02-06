@@ -1,3 +1,16 @@
+[project]
+name = "grapho-server"
+version = "1.5.1"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9.21"
+dependencies = [
+    "responder[full]>=3.0.0.dev0",
+    "neo4j>=5.28.0",
+    "pytest>=8.3.4",
+    "colorama>=0.4.6",
+]
+
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "ERROR"
