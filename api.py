@@ -963,6 +963,9 @@ async def request_handles_database(req,resp,*,db):
          default: neo4j
         description: The database name
     """
+    # TODO config to expose key queries like Handle scope for devops control. 
+    # Grapho XR does not support this atm but its on roadmap 
+
 #     query = '''
 # MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
 # '''
