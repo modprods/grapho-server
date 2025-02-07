@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from marshmallow import Schema, fields
 from requests.auth import HTTPBasicAuth
 from starlette.responses import PlainTextResponse, RedirectResponse
+from responder.ext.openapi import OpenAPISchema
+
 import httpx
 
 load_dotenv(verbose=True,override=True)
@@ -87,7 +89,7 @@ API_TITLE = "Grapho API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.5"
+API_VERSION = "1.6"
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
 logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
@@ -99,11 +101,44 @@ else:
     NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
     logger.info(f"live API instance\n{NEO4J_API}")
 
-api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
+# api = responder.API(
+#     title=API_TITLE, 
+#     enable_hsts=False, 
+#     version=API_VERSION, 
+#     openapi="3.0.0", 
+#     docs_route="/docs", 
+#     cors=True, 
+#     cors_params={"allow_origins":["*"]}
+# )
 
+contact = {
+    "name": "API Support",
+    "url": "https://github.com/modprods/grapho-server",
+    "email": "reception@mod.studio",
+}
+license = {
+    "name": "(C) Mod Productions Pty Ltd. All Rights Reserved",
+    "url": "https://mod.studio",
+}
 
-@api.schema("PageSchema")
+api = responder.API(
+    cors=True, 
+    cors_params={"allow_origins":["*"]},
+)
 
+schema = OpenAPISchema(
+    app=api,
+    title=API_TITLE,
+    version=API_VERSION,
+    # openapi="3.0.2",
+    # docs_route='/docs',
+    description="Reference implementation server for Grapho toolkit",
+    terms_of_service="",
+    contact=contact,
+    license=license
+)
+
+@schema.schema("PageSchema")
 class PageSchema(Schema):
     id = fields.Integer()
     label = fields.Str()
@@ -135,12 +170,11 @@ def hello_world(req, resp):
 def hello_html(req, resp, *, who):
     resp.content = api.template('index.html', who=who)
 
-@api.schema("HandleSchema")
-
-class HandleSchema(Schema):
-    id = fields.Integer()
-    start_id = fields.Float()
-    label = fields.Str()
+# @schema.schema("HandleSchema")
+# class HandleSchema(Schema):
+#     id = fields.Integer()
+#     start_id = fields.Float()
+#     label = fields.Str()
 
 async def fetch_url(client, url):
     logger.error(url)
