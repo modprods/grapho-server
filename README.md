@@ -45,10 +45,11 @@ Server will be available at http://0.0.0.0:5042
 Once you have your graph database set up you can amend the test_api.py file with your own test coverage
 
 ```
-    pytest
+    uv run api.py
+    uv run pytest (in separate window)
 ```
 
-NOTE test suite uses the same server and database atm
+NOTE the test suite does not spin up its own database and server process so testing methods that recursively call the API (e.g. /all method) will fail if API not running
 
 ## Environment settings
 ```
@@ -84,6 +85,9 @@ FIXED_QUERIES = [
     },
 ]
 ```
+
+NOTE fixed queries are planned to be stored in the database going forward for convenience.
+
 ## Docker container
 
 Use the provided Docker file to build and run your own containers
