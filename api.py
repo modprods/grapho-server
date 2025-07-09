@@ -7,6 +7,8 @@ import responder
 from dotenv import load_dotenv
 from marshmallow import Schema, fields
 from requests.auth import HTTPBasicAuth
+from urllib.parse import urlparse
+
 from starlette.responses import PlainTextResponse, RedirectResponse
 import httpx
 
@@ -20,10 +22,10 @@ from query import GraphQuery
 from tools import generate_grapho_id
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.INFO)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+# ch.setLevel(logging._ExcInfoType)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -83,13 +85,15 @@ FIXED_QUERIES = [
 
 # logger.info(type(INCLUDE_FIXED_QUERIES))
 
-API_TITLE = "Grapho API"
+API_TITLE = "Grapho XR API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.5"
+API_VERSION = "1.6"
+
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
+logger.debug(f"LOG_LEVEL is {LOG_LEVEL}")
 logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 
 if int(NEO4J_PORT_HTTP) == 7474:
@@ -98,6 +102,42 @@ if int(NEO4J_PORT_HTTP) == 7474:
 else:
     NEO4J_API = f"neo4j+s://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
     logger.info(f"live API instance\n{NEO4J_API}")
+
+
+def is_url(value):
+    """Check if value is a valid URL"""
+    try:
+        result = urlparse(value)
+        return all([result.scheme in ("http", "https"), result.netloc])
+    except Exception:
+        return False
+    
+async def calculate_total_content_length(data):
+    """Calculate total content length from all media in endpoint response"""
+    total_content_length = 0
+    logger.debug(f"Calculating total content length for {len(data)} handles")
+    for handle in data:
+        for node in handle['nodes']:
+            for property in node['properties'].keys():
+                if is_url(node['properties'][property]):
+                    logger.debug(f"URL: {node['properties'][property]}")
+                    async with httpx.AsyncClient() as client:
+                        try:
+                            response = await client.head(node['properties'][property])
+                            # logger.debug(f"Response: {response.headers}")
+                            size = int(response.headers.get('Content-Length', 0))
+                            # logger.debug(f"Size: {size}")
+                            total_content_length += size
+                        except httpx.RequestError as e:
+                            logger.warning(f"Request error for URL {node['properties'][property]}: {e}")
+                        except httpx.HTTPStatusError as e:
+                            logger.warning(f"HTTP error {e.response.status_code} for URL {node['properties'][property]}")
+                        except ValueError as e:
+                            logger.warning(f"Invalid Content-Length header for URL {node['properties'][property]}: {e}")
+                        except Exception as e:
+                            logger.warning(f"Unexpected error processing URL {node['properties'][property]}: {e}")
+    # return 104857600
+    return total_content_length
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
 
@@ -205,8 +245,10 @@ async def api_all_database(req,resp,*,db):
                 # r = requests.get(handle_request)
                 # refactor for async
                 # handle_requests.append(handle_request)
+                logger.debug(f"handle_request: {handle_request}")
                 async with httpx.AsyncClient() as client2:
                     r = await client2.get(handle_request)
+                    logger.debug(f"r: {r}")
             except ValueError as ex:
                 handle_id = handle['id']
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -232,7 +274,8 @@ async def api_all_database(req,resp,*,db):
             error_code=503
         )
         resp.media = data
-        return 
+        return
+    logger.debug("All handle queries complete")
     handle_node_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
     handle_relationship_id = 200000  
     if INCLUDE_FIXED_QUERIES: # ??? WHY not just if INCLUDE_FIXED_QUERIES
@@ -304,12 +347,18 @@ async def api_all_database(req,resp,*,db):
                         graphs.append(g)
                 except TypeError:
                     logger.warning(f"Fixed Query error for {f['url']} - no 'node' (GDS) format")
-
+    logger.debug("All fixed queries complete")
     if INCLUDE_ADDITIONAL_DIALOGUE:
-        dialogue = requests.get('{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE))
-        additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
+        async with httpx.AsyncClient() as client:
+            additional_dialogue_request = '{0}/dialogue/{1}'.format(PUBLIC_URL,DATABASE)
+            logger.debug(f"Additional dialogue API request: {additional_dialogue_request}")
+            dialogue = await client.get(additional_dialogue_request)
+            additional_dialogue=dialogue.json()['results'][0]['data'][0]['graph']['nodes']
+            logger.debug(f"Additional dialogue: {additional_dialogue}")
     else:
         additional_dialogue = []
+    logger.debug("All additional dialogue queries complete")
+    graphs_content_length = await calculate_total_content_length(graphs)
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
@@ -317,8 +366,13 @@ async def api_all_database(req,resp,*,db):
         publisher=API_PUBLISHER,
         copyright=API_COPYRIGHT,
         graphs=graphs,
+        total_content_length=graphs_content_length,
         additional_dialogue=additional_dialogue
     )
+    # account for JSON size in total_content_length
+    json_bytes = json.dumps(data).encode('utf-8')
+    size_in_bytes = len(json_bytes) + graphs_content_length
+    data['total_content_length'] = size_in_bytes
     resp.media = data
 
 @api.route("/node/schema/{db}")

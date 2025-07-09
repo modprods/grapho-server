@@ -32,8 +32,15 @@ Tested on Debian 9.5, Debian 11.3
 ```
     git clone <repos URL>
     cd grapho-server
+```
+
+Using python 3.10.6 and pipenv
+```
     pipenv shell
-    pipenv install
+    pipenv sync
+```
+
+```
     cp env.sample .env
 ```
 Edit .env to match your environment settings
@@ -41,6 +48,12 @@ Edit .env to match your environment settings
     python api.py
 ```
 Server will be available at http://0.0.0.0:5042
+
+Run via uvicorn to use alternative host and port 
+
+```
+uvicorn api:api --host 0.0.0.0 --port 5042
+```
 
 Once you have your graph database set up you can amend the test_api.py file with your own test coverage
 
@@ -63,6 +76,7 @@ NEO4J_PORT_BOLT = 7687
 PUBLIC_URL = "http://<IP>:5042"
 QUERY_LIMIT = 300
 INCLUDE_FIXED_QUERIES = False
+
 ```
 ## Fixed Queries
 
