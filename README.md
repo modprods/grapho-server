@@ -34,9 +34,15 @@ Tested on Debian 9.5, Debian 11.3
     cd grapho-server
 ```
 
-Using python 3.10.6 and pipenv
+IMPORTANT use of old packages means you have to downgrading setuptools as below. 
+
+An upcoming planned release will be migrating to uv and newer packages to . 
+
+Use python 3.10.6 and pipenv to use the provded Pipfile.lock file -
+
 ```
-    pipenv shell
+    pipenv shell --python 3.10.6
+    pip install "setuptools<58"
     pipenv sync
 ```
 
@@ -61,7 +67,15 @@ Once you have your graph database set up you can amend the test_api.py file with
     pytest
 ```
 
-NOTE test suite uses the same server and database atm
+NOTE test suite does not have a separate database or server
+
+```
+<run server as above>
+
+In separate shell
+
+pytest
+```
 
 ## Environment settings
 ```

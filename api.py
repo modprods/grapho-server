@@ -15,6 +15,7 @@ import httpx
 load_dotenv(verbose=True,override=True)
 import logging
 import os
+import sys
 import time
 
 #from py2neo import Graph
@@ -112,12 +113,37 @@ def is_url(value):
     except Exception:
         return False
     
-async def calculate_total_content_length(data):
+async def calculate_total_content_length(data,type=""):
     """Calculate total content length from all media in endpoint response"""
     total_content_length = 0
-    logger.debug(f"Calculating total content length for {len(data)} handles")
-    for handle in data:
-        for node in handle['nodes']:
+    # for bespoke /all structure
+
+    if type == "handles":
+        logger.debug(f"Calculating total content length for {len(data)} handles")
+        for handle in data:
+            for node in handle['nodes']:
+                for property in node['properties'].keys():
+                    if is_url(node['properties'][property]):
+                        logger.debug(f"URL: {node['properties'][property]}")
+                        async with httpx.AsyncClient() as client:
+                            try:
+                                response = await client.head(node['properties'][property])
+                                # logger.debug(f"Response: {response.headers}")
+                                size = int(response.headers.get('Content-Length', 0))
+                                # logger.debug(f"Size: {size}")
+                                total_content_length += size
+                            except httpx.RequestError as e:
+                                logger.warning(f"Request error for URL {node['properties'][property]}: {e}")
+                            except httpx.HTTPStatusError as e:
+                                logger.warning(f"HTTP error {e.response.status_code} for URL {node['properties'][property]}")
+                            except ValueError as e:
+                                logger.warning(f"Invalid Content-Length header for URL {node['properties'][property]}: {e}")
+                            except Exception as e:
+                                logger.warning(f"Unexpected error processing URL {node['properties'][property]}: {e}")
+    else:
+        # for Neo4j generic result syntax
+        logger.debug(f"Calculating total content length for {len(data)} nodes")
+        for node in data:
             for property in node['properties'].keys():
                 if is_url(node['properties'][property]):
                     logger.debug(f"URL: {node['properties'][property]}")
@@ -136,7 +162,6 @@ async def calculate_total_content_length(data):
                             logger.warning(f"Invalid Content-Length header for URL {node['properties'][property]}: {e}")
                         except Exception as e:
                             logger.warning(f"Unexpected error processing URL {node['properties'][property]}: {e}")
-    # return 104857600
     return total_content_length
 
 api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, openapi="3.0.0", docs_route="/docs", cors=True, cors_params={"allow_origins":["*"]})
@@ -213,7 +238,7 @@ async def api_all_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: neo4j
+                default: demo
                description: The database name
     """
 #    resp.status_code = api.status_codes.HTTP_302
@@ -227,8 +252,17 @@ async def api_all_database(req,resp,*,db):
     handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
     logger.debug(f'Handles API request: {handles_request}')
     async with httpx.AsyncClient() as client:
-        handles = await client.get(handles_request)
-    # handle_requests = []
+        try:
+            handles = await client.get(handles_request)
+        except Exception as e:
+            logger.error(f"Error fetching handles: {e} - check if PUBLIC_URL env variable ({PUBLIC_URL})is valid")
+            resp.status_code = api.status_codes.HTTP_503
+            data = dict(
+                message="Invalid API request",
+                error_code=503
+            )
+            resp.media = data
+            return
     try:
         for handle in handles.json()['results'][0]['data'][0]['graph']['nodes']:
             logger.debug(handle)
@@ -358,7 +392,7 @@ async def api_all_database(req,resp,*,db):
     else:
         additional_dialogue = []
     logger.debug("All additional dialogue queries complete")
-    graphs_content_length = await calculate_total_content_length(graphs)
+    graphs_content_length = await calculate_total_content_length(graphs,'handles')
     data = dict(
         author=API_AUTHOR,
         database=DATABASE,
@@ -389,7 +423,7 @@ def api_node_schema(req,resp,*, db):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name                 
         responses:
             200:
@@ -435,7 +469,7 @@ def api_rel_schema(req,resp,*, db):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name                 
         responses:
             200:
@@ -481,7 +515,7 @@ async def api_neighbours(req,resp,*, db, node_id, distance):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
          - in: path
            name: node_id
@@ -489,7 +523,7 @@ async def api_neighbours(req,resp,*, db, node_id, distance):
            schema:
             type: integer
             minimum: 0
-            default: 1000
+            default: 1
            description: The node ID (e.g. 1000)
          - in: path
            name: distance
@@ -518,13 +552,22 @@ LIMIT {QUERY_LIMIT}"
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
-        # logger.debug(graph)
-        resp.media = json.loads(graph)
+        # logger.debug(f"Graph: {type(graph)}")
+        result = json.loads(graph)
+        # logger.debug(f"Result: {type(result)}")
+        path = result['results'][0]['data'][0]['graph']['nodes']
+        # logger.debug(f"Result graph for calculate_total_content_length: {path}")
+        result['total_content_length'] = await calculate_total_content_length(path)
+        json_str = json.dumps(result)
+        json_size = sys.getsizeof(json_str)
+        result['total_content_length'] += json_size
+        resp.media = result
         resp.status_code = api.status_codes.HTTP_200 
+        q.close()
     except Exception as e:
         logger.error(e)
         resp.status_code = api.status_codes.HTTP_503
-    q.close()
+ 
 
 @api.route("/dialogue/{db}")
 def api_dialogue(req,resp,*, db):
@@ -540,7 +583,7 @@ def api_dialogue(req,resp,*, db):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
         responses:
             200:
@@ -567,7 +610,7 @@ LIMIT {QUERY_LIMIT}"
     q.close()
 
 @api.route("/game/{db}")
-def api_game(req,resp,*, db):
+async def api_game(req,resp,*, db):
     """Subgraph intended for use in game engine.
     ---
     get:
@@ -580,7 +623,7 @@ def api_game(req,resp,*, db):
            schema:
             type: string
             minimum: 1
-            default: groove
+            default: demo
            description: The database name
         responses:
             200:
@@ -603,7 +646,15 @@ RETURN n,r
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
         # logger.debug(graph)
-        resp.media = json.loads(graph)
+        result = json.loads(graph)
+        # logger.debug(f"Result: {type(result)}")
+        path = result['results'][0]['data'][0]['graph']['nodes']
+        # logger.debug(f"Result graph for calculate_total_content_length: {path}")
+        result['total_content_length'] = await calculate_total_content_length(path)
+        json_str = json.dumps(result)
+        json_size = sys.getsizeof(json_str)
+        result['total_content_length'] += json_size
+        resp.media = result
         resp.status_code = api.status_codes.HTTP_200 
     except Exception as e:
         logger.error(e)
