@@ -1,5 +1,6 @@
 import json
 import urllib.parse
+import asyncio
 
 import graphene
 import requests
@@ -90,14 +91,14 @@ API_TITLE = "Grapho XR API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.6"
+API_VERSION = "1.7"
 
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
 logger.debug(f"LOG_LEVEL is {LOG_LEVEL}")
 logger.debug(f"INCLUDE_FIXED_QUERIES is {INCLUDE_FIXED_QUERIES}")
 
-if int(NEO4J_PORT_HTTP) == 7474:
+if NEO4J_PORT_HTTP and int(NEO4J_PORT_HTTP) == 7474:
     NEO4J_API = f"neo4j://{NEO4J_HOST}:{NEO4J_PORT_BOLT}"
     logger.info(f"dev API instance\n{NEO4J_API}")
 else:
@@ -256,7 +257,7 @@ async def api_all_database(req,resp,*,db):
             handles = await client.get(handles_request)
         except Exception as e:
             logger.error(f"Error fetching handles: {e} - check if PUBLIC_URL env variable ({PUBLIC_URL})is valid")
-            resp.status_code = api.status_codes.HTTP_503
+            resp.status_code = 503
             data = dict(
                 message="Invalid API request",
                 error_code=503
@@ -294,6 +295,11 @@ async def api_all_database(req,resp,*,db):
                 logger.debug(f'Label: {label}')
                 logger.debug(f'Id: {handle_id}')
                 logger.debug(handle_request)
+                handle_data = {
+                    'id': handle_id,
+                    'db': DATABASE,
+                    'lod': lod
+                }
                 r = requests.post(handle_request,json=handle_data)
             g = r.json()['results'][0]['data'][0]['graph']
             g['handle_id'] = handle_id
@@ -302,7 +308,7 @@ async def api_all_database(req,resp,*,db):
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         message = template.format(type(ex).__name__, ex.args)
         logger.warning(message)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
         data = dict(
             message="Invalid API request",
             error_code=503
@@ -451,9 +457,9 @@ propData.existence as existenceConstraint"
         graph = q.run(query,False)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503    
+        resp.status_code = 503    
 
 @api.route("/rel/schema/{db}")
 def api_rel_schema(req,resp,*, db):
@@ -497,9 +503,9 @@ propData.existence as existenceConstraint"
         graph = q.run(query,False)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503 
+        resp.status_code = 503 
 
 @api.route("/neighbours/{db}/{node_id}/{distance}")
 async def api_neighbours(req,resp,*, db, node_id, distance):
@@ -562,11 +568,11 @@ LIMIT {QUERY_LIMIT}"
         json_size = sys.getsizeof(json_str)
         result['total_content_length'] += json_size
         resp.media = result
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
         q.close()
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
  
 
 @api.route("/dialogue/{db}")
@@ -603,10 +609,10 @@ LIMIT {QUERY_LIMIT}"
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
     q.close()
 
 @api.route("/game/{db}")
@@ -655,10 +661,10 @@ RETURN n,r
         json_size = sys.getsizeof(json_str)
         result['total_content_length'] += json_size
         resp.media = result
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
     q.close()
 
 # @api.route("/ipv4/{db}/{addr}/{length}")
@@ -675,7 +681,7 @@ def api_ipv4(req,resp,*, db, addr,length):
            schema:
             type: string
             minimum: 1
-            default: neo4j
+            default: demo
            description: The database name
          - in: path
            name: addr
@@ -724,10 +730,10 @@ RETURN ip4,{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/ipv6/{db}/{addr}/{length}")
 def api_ipv6_roa(req,resp,*, db, addr,length):
@@ -743,7 +749,7 @@ def api_ipv6_roa(req,resp,*, db, addr,length):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
          - in: path
            name: addr
@@ -787,10 +793,10 @@ RETURN ip6, asnList, collect(roa) AS roaList{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/ipv4/paths/{db}/{addr1}/{length1}/{addr2}/{length2}")
 def api_possible_paths(req,resp,*, db, addr1,length1,addr2,length2):
@@ -806,7 +812,7 @@ def api_possible_paths(req,resp,*, db, addr1,length1,addr2,length2):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
          - in: path
            name: addr1
@@ -861,10 +867,10 @@ RETURN p{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/asn/{db}/{asn}")
 def api_asn(req,resp,*, db, asn):
@@ -880,7 +886,7 @@ def api_asn(req,resp,*, db, asn):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
          - in: path
            name: asn
@@ -930,10 +936,10 @@ RETURN asn,{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 @api.route("/search/{db}/{query}")
 def api_default_freetext_search(req,resp,*, db, query):
@@ -949,7 +955,7 @@ def api_default_freetext_search(req,resp,*, db, query):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name
          - in: path
            name: query
@@ -977,10 +983,10 @@ RETURN node
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 def neo4j_query(query):
     query = query
@@ -992,7 +998,7 @@ def neo4j_query(query):
     r = requests.post(f'{NEO4J_API}/transaction/commit', \
         headers = {'Content-type': 'application/json'}, \
         json = data, \
-        auth=HTTPBasicAuth(NEO4J_USER,NEO4J_PASSWORD) \
+        auth=HTTPBasicAuth(NEO4J_USER or '',NEO4J_PASSWORD or '') \
         )
     result = json.loads(r.text)
     return(json,r.status_code)
@@ -1016,7 +1022,7 @@ async def request_handles_database(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: neo4j
+                default: demo
                description: The database name
     post:
      summary: Post values
@@ -1043,10 +1049,10 @@ MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
         graph = q.run(query)
         logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
     q.close() 
 
 @api.route("/handle/{db}/{id}/{lod}")
@@ -1078,7 +1084,7 @@ async def request_handle_database(req,resp,*, db, id, lod):
            schema:
             type: string
             minimum: 1
-            default: apnic
+            default: demo
            description: The database name                      
         responses:
             200:
@@ -1099,10 +1105,10 @@ async def request_handle_database(req,resp,*, db, id, lod):
         logger.debug(query)
         graph = q.run(query)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
     q.close()
 
 @api.route("/handle")
@@ -1134,7 +1140,7 @@ async def request_handle_database_v5(req,resp):
            schema:
             type: string
             minimum: 1
-            default: neo4j
+            default: demo
            description: The database name                      
         responses:
             200:
@@ -1161,10 +1167,10 @@ async def request_handle_database_v5(req,resp):
         logger.debug(query)
         graph = q.run(query)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 #@api.route("/connectednodes/{db}")
 def connectednodes(req,resp,*,db):
@@ -1185,14 +1191,16 @@ def connectednodes(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
                description: The database name
     """
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) > 0 RETURN count(n) as connected_nodes").data()
+        # TODO: Re-enable when py2neo Graph is available
+        # graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        # resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) > 0 RETURN count(n) as connected_nodes").data()
+        resp.status_code = 503
     except:
-        resp.status_code = api.status_codes.HTTP_503    
+        resp.status_code = 503    
 
 #@api.route("/orphanednodes/{db}")
 def orphanednodes(req,resp,*, db):
@@ -1213,14 +1221,16 @@ def orphanednodes(req,resp,*, db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
                description: The database name
     """
     try:
-        graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
-        resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) < 1 RETURN count(n) as orphaned_nodes").data()
+        # TODO: Re-enable when py2neo Graph is available
+        # graph = Graph(f"neo4j+s://{NEO4J_HOST}:7687",name=db,auth=(NEO4J_USER,NEO4J_PASSWORD))
+        # resp.media=graph.run("MATCH (n) WHERE size((n)<-->()) < 1 RETURN count(n) as orphaned_nodes").data()
+        resp.status_code = 503
     except:
-        resp.status_code = api.status_codes.HTTP_503  
+        resp.status_code = 503  
 
 @api.route("/statistics/{db}")
 async def statistics(req,resp,*,db):
@@ -1241,7 +1251,7 @@ async def statistics(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: neo4j
+                default: demo
                description: The database name
     """
     query = "MATCH (n) WITH count(n) as nodes MATCH ()-[r]->() RETURN nodes, count(r) as relationships"
@@ -1250,9 +1260,9 @@ async def statistics(req,resp,*,db):
         graph = q.run(query,False)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503    
+        resp.status_code = 503    
     q.close()
 
 @api.route("/databases")
@@ -1276,9 +1286,9 @@ async def databases(req,resp):
         graph = q.run(query,False)
         logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503  
+        resp.status_code = 503  
     q.close()
 
 # @api.route("/twitter")
@@ -1306,7 +1316,7 @@ async def api_apnic_neighbour_asn_diffcountry(req,resp,*,db):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
                description: The database name
     """
     DATABASE = db
@@ -1322,10 +1332,10 @@ RETURN as1, r1, as2, r2, as3 LIMIT 100{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/asn_by_country/{db}/{country}")
 async def api_apnic_asn_by_country(req,resp,*,db,country):
@@ -1346,7 +1356,7 @@ async def api_apnic_asn_by_country(req,resp,*,db,country):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
              - in: path
                name: country
                required: true
@@ -1367,10 +1377,10 @@ MATCH (n:ASN) WHERE n.country = '{country}' RETURN n{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/connected_contacts/{db}/{contact}")
 async def api_apnic_connected_contacts(req,resp,*,db,contact):
@@ -1391,7 +1401,7 @@ async def api_apnic_connected_contacts(req,resp,*,db,contact):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
                description: The database name
              - in: path
                name: contact
@@ -1420,10 +1430,10 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 # @api.route("/adjacent_asn_subgraph/{db}/{asn}")
 async def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
@@ -1444,7 +1454,7 @@ async def api_apnic_adjacent_asn_subgraph(req,resp,*,db,asn):
                schema:
                 type: string
                 minimum: 1
-                default: apnic
+                default: demo
              - in: path
                name: asn
                required: true
@@ -1472,10 +1482,10 @@ RETURN nodes, relationships LIMIT 200{chr(10)}\
         graph = q.run(query)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except Exception as e:
         logger.error(e)
-        resp.status_code = api.status_codes.HTTP_503
+        resp.status_code = 503
 
 
 @api.route("/fixed_queries")
@@ -1540,9 +1550,9 @@ RETURN {{
         graph = q.run(query,False)
         logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503  
+        resp.status_code = 503  
 
 @api.route("/top_node_similarity/{limit}")
 async def api_top_node_similarity(req,resp,*,limit):
@@ -1583,9 +1593,9 @@ RETURN n, o ORDER by similarity DESC LIMIT  {limit}
         graph = q.run(query,False)
         logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503  
+        resp.status_code = 503  
 
 @api.route("/up_next")
 async def api_up_next(req,resp):
@@ -1620,9 +1630,9 @@ RETURN collect(nodes(path2)), collect(relationships(path2))
         graph = q.run(query,True)
         # logger.debug(graph)
         resp.media = json.loads(graph)
-        resp.status_code = api.status_codes.HTTP_200 
+        resp.status_code = 200 
     except:
-        resp.status_code = api.status_codes.HTTP_503  
+        resp.status_code = 503  
     q.close()
 
 if __name__ == "__main__":
