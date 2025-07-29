@@ -80,14 +80,14 @@ def test_handles(api,caplog):
      # logger.info(r.text)
      data = json.loads(r.text)
      handle_list = [
-          node["id"]
+          node["elementId"]
           for result in data.get("results", [])
           for record in result.get("data", [])
           for node in record.get("graph", {}).get("nodes", [])
      ]
-     for id in handle_list:
-          logger.info(f"Query handle id {id}")
-          r = api.requests.get(f"/handle/{DATABASE}/{id}/1")
+     for elementId in handle_list:
+          logger.info(f"Query handle elementId {elementId}")
+          r = api.requests.get(f"/handle/{DATABASE}/{elementId}/1")
           assert r.status_code == 200
 
 def test_all_method(api):
