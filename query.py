@@ -5,10 +5,13 @@ import json
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+
+LOG_LEVEL = os.getenv('LOG_LEVEL')
+
+logger.setLevel(logging.DEBUG)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -91,8 +94,9 @@ class GraphQuery:
         #     logger.debug(i)
         # logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
+            logger.debug(i)
             n = dict(
-                id = i.id,
+                elementId = i.element_id,
                 labels = list(i.labels),
                 properties = dict(i.items())
             )
@@ -100,10 +104,10 @@ class GraphQuery:
         logger.debug(f"{len(result.relationships)} relationships")
         for i in result.relationships:
             r = dict(
-                id = i.id,
+                elementId = i.element_id,
                 type = i.type,
-                startNode = i.nodes[0].id, # this is deprecated (need to shift to element_id)
-                endNode = i.nodes[1].id,
+                startNode = i.nodes[0].element_id, # this is deprecated (need to shift to element_id)
+                endNode = i.nodes[1].element_id,
                 properties = dict(i.items())
             )
             relationships.append(r)
