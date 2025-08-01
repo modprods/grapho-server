@@ -965,7 +965,7 @@ async def request_handle_database(req,resp,*, db, id, lod):
            schema:
             type: integer
             minimum: 0
-            default: 1
+            default: 0
            description: The level of detail (LOD) to return
          - in: path
            name: db
@@ -981,14 +981,30 @@ async def request_handle_database(req,resp,*, db, id, lod):
             503:
                 description: Temporary service issue. Try again later
     """
+    # query = f"\
+    #     MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+    #     WHERE ID(a)={id}{chr(10)}\
+    #     UNWIND (nodes(path)) as n{chr(10)}\
+    #     WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+    #     WHERE NOT (b:Handle AND NOT ID(b)={id}){chr(10)}\
+    #     RETURN collect(nodes(path2)), collect(relationships(path2))"
     query = f"\
         MATCH path = (a)-[:NEXT*]->(){chr(10)}\
-        WHERE ID(a)={id}{chr(10)}\
-        UNWIND (nodes(path)) as n{chr(10)}\
-        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
-        WHERE NOT (b:Handle AND NOT ID(b)={id}){chr(10)}\
-        RETURN collect(nodes(path2)), collect(relationships(path2))"
-
+        WHERE ID(a) = {id}{chr(10)}\
+        UNWIND nodes(path) AS n{chr(10)}\
+        WITH DISTINCT n{chr(10)}\
+        LIMIT {QUERY_LIMIT}{chr(10)}\
+        WITH collect(n) AS seedNodes{chr(10)}\
+        UNWIND seedNodes AS n{chr(10)}\
+        MATCH path2 = (n)-[*0..1]-(b){chr(10)}\
+        WHERE NOT (b:Handle AND ID(b) <> {id}){chr(10)}\
+        WITH collect(n) + collect(b) AS allNodes,{chr(10)}\
+        collect(relationships(path2)) AS allRels{chr(10)}\
+        WITH apoc.coll.toSet(apoc.coll.flatten(allNodes)) AS totalNodes, allRels{chr(10)}\
+        WITH totalNodes[0..{QUERY_LIMIT}] AS limitedNodes, allRels{chr(10)}\
+        RETURN limitedNodes AS nodes, [rel IN apoc.coll.flatten(allRels) WHERE startNode(rel){chr(10)}\
+        IN limitedNodes AND endNode(rel) IN limitedNodes] AS rels{chr(10)}\
+    "
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         logger.debug(query)
@@ -1521,4 +1537,4 @@ RETURN collect(nodes(path2)), collect(relationships(path2))
     q.close()
 
 if __name__ == "__main__":
-    api.run(address="0.0.0.0")
+    api.run(address="0.0.0.0",port=5043)
