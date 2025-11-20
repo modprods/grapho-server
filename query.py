@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 LOG_LEVEL = os.getenv('LOG_LEVEL')
 
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.ERROR)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -65,6 +65,7 @@ class GraphQuery:
 
     def run(self, query,graph=True):
         with self.driver.session(database=self.database) as session:
+            print(query)
             results = session.execute_read(self._read_query,query,self.path,graph)
             return results
 

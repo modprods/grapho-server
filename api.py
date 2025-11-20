@@ -52,8 +52,8 @@ logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
-
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
+DEFAULT_DISTANCE = os.getenv('DEFAULT_DISTANCE')
 
 LOG_LEVEL = os.getenv('LOG_LEVEL')
 if LOG_LEVEL == "DEBUG":
@@ -247,8 +247,11 @@ async def api_all_database(req,resp,*,db):
 #    resp.headers['Location'] = '/static/test.json'
     graphs = []
     DATABASE = db
-    # LOD sets default number of neighbours to include in handles
-    lod = 1 # default is 1
+    # TODO rename lod to distance
+    try:
+        lod = int(DEFAULT_DISTANCE)
+    except:
+        lod = 1 # default is 1
    # if DATABASE == 'groove':
    #     lod = 2
     handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
@@ -549,12 +552,24 @@ async def api_neighbours(req,resp,*, db, node_element_id, distance):
     DATABASE = db
     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     distance=int(distance)
-    assert(1 <= distance <= 2)  
-    query = f"\
+    assert(1 <= distance <= 2)
+
+    # Backwards compatibility for deprecated ID lookups
+    try:
+        int(node_element_id)
+        query = f"\
 MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
-WHERE id(a) = {node_element_id} AND NOT neighbour:Handle{chr(10)}\
+WHERE ID(a) = {int(node_element_id)} AND NOT neighbour:Handle{chr(10)}\
 RETURN collect(distinct(neighbour)),r{chr(10)}\
 LIMIT {QUERY_LIMIT}"
+        logger.warning("Deprecated query - change client to use elementID")
+    except:
+        query = f"\
+    MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
+    WHERE elementId(a) = '{node_element_id}' AND NOT neighbour:Handle{chr(10)}\
+    RETURN collect(distinct(neighbour)),r{chr(10)}\
+    LIMIT {QUERY_LIMIT}"
+
     logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
@@ -1095,12 +1110,44 @@ async def request_handle_database(req,resp,*, db, element_id, lod):
                 description: Temporary service issue. Try again later
     """
     query = f"\
-        MATCH path = (a)-[:NEXT*]->(){chr(10)}\
-        WHERE elementId(a)='{element_id}'{chr(10)}\
-        UNWIND (nodes(path)) as n{chr(10)}\
-        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
-        WHERE NOT (b:Handle AND NOT elementId(b)='{element_id}'){chr(10)}\
-        RETURN collect(nodes(path2)), collect(relationships(path2))"
+       MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+       WHERE elementId(a) = '{element_id}'{chr(10)}\
+       UNWIND nodes(path) AS n{chr(10)}\
+       WITH DISTINCT n{chr(10)}\
+       LIMIT {QUERY_LIMIT}{chr(10)}\
+       WITH collect(n) AS seedNodes{chr(10)}\
+       UNWIND seedNodes AS n{chr(10)}\
+       MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+       WHERE NOT (b:Handle AND elementId(b) <> '{element_id}'){chr(10)}\
+       WITH collect(n) + collect(b) AS allNodes,{chr(10)}\
+       collect(relationships(path2)) AS allRels{chr(10)}\
+       WITH apoc.coll.toSet(apoc.coll.flatten(allNodes)) AS totalNodes, allRels{chr(10)}\
+       WITH totalNodes[0..{QUERY_LIMIT}] AS limitedNodes, allRels{chr(10)}\
+       RETURN limitedNodes AS nodes, [rel IN apoc.coll.flatten(allRels) WHERE startNode(rel){chr(10)}\
+       IN limitedNodes AND endNode(rel) IN limitedNodes] AS rels{chr(10)}\
+    "
+
+    path_only_query = f"\
+       MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+       WHERE elementId(a) = '{element_id}'{chr(10)}\
+       UNWIND nodes(path) AS n{chr(10)}\
+       WITH DISTINCT n{chr(10)}\
+       LIMIT {QUERY_LIMIT}{chr(10)}\
+       WITH collect(n) AS seedNodes{chr(10)}\
+       UNWIND seedNodes AS n{chr(10)}\
+       MATCH path2 = (n)-[:NEXT*0..1]-(b){chr(10)}\
+       WHERE NOT (b:Handle AND elementId(b) <> '{element_id}'){chr(10)}\
+       WITH collect(n) + collect(b) AS allNodes,{chr(10)}\
+       collect(relationships(path2)) AS allRels{chr(10)}\
+       WITH apoc.coll.toSet(apoc.coll.flatten(allNodes)) AS totalNodes, allRels{chr(10)}\
+       WITH totalNodes[0..{QUERY_LIMIT}] AS limitedNodes, allRels{chr(10)}\
+       RETURN limitedNodes AS nodes, [rel IN apoc.coll.flatten(allRels) WHERE startNode(rel){chr(10)}\
+       IN limitedNodes AND endNode(rel) IN limitedNodes] AS rels{chr(10)}\
+    "
+
+    # CYPHER TO ENSURE RELS ARE INCLUDED
+    if int(lod) == 0:
+        query = path_only_query
 
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
@@ -1586,7 +1633,7 @@ CALL gds.nodeSimilarity.stream(
   node2,
   similarity
 WITH node1, node2, similarity
-MATCH (n),(o) WHERE ID(n)= node1 AND ID(o) = node2
+MATCH (n),(o) WHERE elementId(n)= '{node1}' AND elementId(o) = '{node2}'
 RETURN n, o ORDER by similarity DESC LIMIT  {limit}
 """
     try:
