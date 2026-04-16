@@ -662,6 +662,7 @@ NOT '_Bloom_Scene_' IN labels(n) AND
 NOT '_Bloom_Perspective_' IN labels(n)
 OPTIONAL MATCH (n)-[r]-(x)
 RETURN n,r
+LIMIT {QUERY_LIMIT}
 """
     logger.debug(query)
     try:
