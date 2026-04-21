@@ -5,6 +5,9 @@ import json
 
 import logging
 logger = logging.getLogger(__name__)
+
+LOG_LEVEL = os.getenv('LOG_LEVEL')
+
 logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
@@ -62,6 +65,7 @@ class GraphQuery:
 
     def run(self, query,graph=True):
         with self.driver.session(database=self.database) as session:
+            print(query)
             results = session.execute_read(self._read_query,query,self.path,graph)
             return results
 
@@ -91,8 +95,9 @@ class GraphQuery:
         #     logger.debug(i)
         # logger.debug(f"{len(result.nodes)} nodes")
         for i in result.nodes:
+            logger.debug(i)
             n = dict(
-                id = i.id,
+                elementId = i.element_id,
                 labels = list(i.labels),
                 properties = dict(i.items())
             )
@@ -100,10 +105,10 @@ class GraphQuery:
         logger.debug(f"{len(result.relationships)} relationships")
         for i in result.relationships:
             r = dict(
-                id = i.id,
+                elementId = i.element_id,
                 type = i.type,
-                startNode = i.nodes[0].id, # this is deprecated (need to shift to element_id)
-                endNode = i.nodes[1].id,
+                startNode = i.nodes[0].element_id, # this is deprecated (need to shift to element_id)
+                endNode = i.nodes[1].element_id,
                 properties = dict(i.items())
             )
             relationships.append(r)

@@ -52,8 +52,8 @@ logger.debug(f"NEO4J_DATABASE is {NEO4J_DATABASE}")
 PUBLIC_URL = os.getenv('PUBLIC_URL')
 QUERY_LIMIT = os.getenv('QUERY_LIMIT')
 INCLUDE_FIXED_QUERIES = eval(os.getenv('INCLUDE_FIXED_QUERIES',"False"))
-
 INCLUDE_ADDITIONAL_DIALOGUE = eval(os.getenv('INCLUDE_ADDITIONAL_DIALOGUE',"False"))
+DEFAULT_DISTANCE = os.getenv('DEFAULT_DISTANCE')
 
 LOG_LEVEL = os.getenv('LOG_LEVEL')
 if LOG_LEVEL == "DEBUG":
@@ -91,7 +91,7 @@ API_TITLE = "Grapho XR API"
 API_AUTHOR = "Michela Ledwidge"
 API_PUBLISHER = "Mod Productions Pty Ltd."
 API_COPYRIGHT = "All Rights Reserved"
-API_VERSION = "1.7"
+API_VERSION = "1.8"
 
 
 logger.info(f"{API_TITLE} v{API_VERSION} for Neo4j user {NEO4J_USER}")
@@ -172,6 +172,7 @@ api = responder.API(title=API_TITLE, enable_hsts=False, version=API_VERSION, ope
 
 class PageSchema(Schema):
     id = fields.Integer()
+    element_id = fields.Str()
     label = fields.Str()
     source = fields.Str()
     source_url = fields.URL()
@@ -204,8 +205,8 @@ def hello_html(req, resp, *, who):
 @api.schema("HandleSchema")
 
 class HandleSchema(Schema):
-    id = fields.Integer()
-    start_id = fields.Float()
+    elemnent_id = fields.Integer()
+    start_element_id = fields.Float()
     label = fields.Str()
 
 async def fetch_url(client, url):
@@ -246,8 +247,11 @@ async def api_all_database(req,resp,*,db):
 #    resp.headers['Location'] = '/static/test.json'
     graphs = []
     DATABASE = db
-    # LOD sets default number of neighbours to include in handles
-    lod = 1 # default is 1
+    # TODO rename lod to distance
+    try:
+        lod = int(DEFAULT_DISTANCE)
+    except:
+        lod = 1 # default is 1
    # if DATABASE == 'groove':
    #     lod = 2
     handles_request = '{0}/handles/{1}'.format(PUBLIC_URL,DATABASE)
@@ -270,13 +274,13 @@ async def api_all_database(req,resp,*,db):
             try:
                 label = handle['properties']['label']
             except KeyError as e:
-                logger.error("TODO - fix dependency on label property")
+                logger.warning("/all Handle has no label - using name instead - fix dependency on label property")
                 label = handle['properties']['name']
             try:
-                handle_id = int(handle['id'])
-                logger.warning(f"Neo4j integer id deprecated - need to change to string: {handle_id}")
+                handle_element_id = handle['elementId']
+                # logger.error(f"Neo4j integer id no longer supported as deprecated in database - need string: {handle_element_id}")
                 handle_request = '{0}/handle/{1}/{2}/{3}'.format(
-            PUBLIC_URL, DATABASE,handle_id,lod)
+            PUBLIC_URL, DATABASE,handle_element_id,lod)
                 # r = requests.get(handle_request)
                 # refactor for async
                 # handle_requests.append(handle_request)
@@ -285,24 +289,24 @@ async def api_all_database(req,resp,*,db):
                     r = await client2.get(handle_request)
                     logger.debug(f"r: {r}")
             except ValueError as ex:
-                handle_id = handle['id']
+                handle_element_id = handle['element_id']
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
                 logger.error(message)
-                logger.error(f"Neo4j 5 new id detected: {handle_id} - not ready to support yet")
+                logger.error(f"all: Error processing handle: {handle_element_id}")
                 handle_request = '{0}/handle'.format(
             PUBLIC_URL)
                 logger.debug(f'Label: {label}')
-                logger.debug(f'Id: {handle_id}')
+                logger.debug(f'Id: {handle_element_id}')
                 logger.debug(handle_request)
                 handle_data = {
-                    'id': handle_id,
+                    'elementId': handle_element_id,
                     'db': DATABASE,
                     'lod': lod
                 }
                 r = requests.post(handle_request,json=handle_data)
             g = r.json()['results'][0]['data'][0]['graph']
-            g['handle_id'] = handle_id
+            g['handle_element_id'] = handle_element_id
             graphs.append(g)
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -316,12 +320,12 @@ async def api_all_database(req,resp,*,db):
         resp.media = data
         return
     logger.debug("All handle queries complete")
-    handle_node_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
-    handle_relationship_id = 200000  
+    handle_node_element_id = 100000 # HACK - instead of using DB generated id, create one for handles - DANGEROUS\
+    handle_relationship_element_id = 200000  
     if INCLUDE_FIXED_QUERIES: # ??? WHY not just if INCLUDE_FIXED_QUERIES
         for f in FIXED_QUERIES:
-            handle_node_id = handle_node_id + 1
-            handle_relationship_id = handle_relationship_id + 1
+            handle_node_element_id = handle_node_element_id + 1
+            handle_relationship_element_id = handle_relationship_element_id + 1
             logger.debug(f['url'])
             r = requests.get(f["url"])
             g = {}
@@ -334,7 +338,7 @@ async def api_all_database(req,resp,*,db):
                     for r in subgraph['graph']['relationships']:
                         relationships.append(r)
                 handle_node = dict(
-                        id=handle_node_id,
+                        element_id=str(handle_node_element_id),
                         labels = ["Handle"],
                         properties= {
                             "label": f["label"],
@@ -344,16 +348,16 @@ async def api_all_database(req,resp,*,db):
                 nodes.append(handle_node)
                 g["nodes"] = nodes
                 handle_relationship = dict(
-                        id=handle_relationship_id,
+                        elementId=handle_relationship_element_id,
                         type="NEXT",
-                        startNode=handle_node_id,
+                        startNode=handle_node_element_id,
                         endNode=nodes[0]['id'],
                         properties= {
                         }
                 )
                 relationships.append(handle_relationship)
                 g["relationships"] = relationships
-                g["handle_id"] = handle_node_id
+                g["handle_element_id"] = str(handle_node_element_id)
                 graphs.append(g)
             except TypeError:
                 logger.warning(f"Fixed Query error for {f['url']} - no 'results'")
@@ -364,7 +368,7 @@ async def api_all_database(req,resp,*,db):
                             nodes.append(subgraph['node'])
                         # TODO fix break of DRY
                         handle_node = dict(
-                                id=handle_node_id,
+                                elementId=str(handle_node_element_id),
                                 labels = ["Handle"],
                                 properties= {
                                     "label": f["label"],
@@ -374,16 +378,16 @@ async def api_all_database(req,resp,*,db):
                         nodes.append(handle_node)
                         g["nodes"] = nodes
                         handle_relationship = dict(
-                                id=handle_relationship_id,
+                                elementId=str(handle_relationship_element_id),
                                 type="NEXT",
-                                startNode=str(handle_node_id),
-                                endNode=str(nodes[0]['id']),
+                                startNode=str(handle_node_element_id),
+                                endNode=str(nodes[0]['elementId']),
                                 properties= {
                                 }
                         )
                         relationships.append(handle_relationship)
                         g["relationships"] = relationships
-                        g["handle_id"] = handle_node_id
+                        g["handle_element_id"] = str(handle_node_element_id)
                         graphs.append(g)
                 except TypeError:
                     logger.warning(f"Fixed Query error for {f['url']} - no 'node' (GDS) format")
@@ -507,8 +511,8 @@ propData.existence as existenceConstraint"
     except:
         resp.status_code = 503 
 
-@api.route("/neighbours/{db}/{node_id}/{distance}")
-async def api_neighbours(req,resp,*, db, node_id, distance):
+@api.route("/neighbours/{db}/{node_element_id}/{distance}")
+async def api_neighbours(req,resp,*, db, node_element_id, distance):
     """Subgraph comprising neighbours of specified node.
     ---
     get:
@@ -524,13 +528,13 @@ async def api_neighbours(req,resp,*, db, node_id, distance):
             default: demo
            description: The database name
          - in: path
-           name: node_id
+           name: node_element_id
            required: true
            schema:
-            type: integer
-            minimum: 0
-            default: 1
-           description: The node ID (e.g. 1000)
+            type: string
+            minLength: 1
+            nullable: false
+           description: The node elementID (e.g. "4:d8d172ec-96d8-4364-8f5d-9353d776aeb3:0")
          - in: path
            name: distance
            required: true
@@ -538,7 +542,7 @@ async def api_neighbours(req,resp,*, db, node_id, distance):
             type: integer
             minimum: 1
             default: 1
-           description: Distance of neighbours to node_id                    
+           description: Distance of neighbours to node_element_id                    
         responses:
             200:
                 description: Respond with all feed values required for experience
@@ -548,12 +552,24 @@ async def api_neighbours(req,resp,*, db, node_id, distance):
     DATABASE = db
     endpoint = f'{NEO4J_API}/{DATABASE}/tx'
     distance=int(distance)
-    assert(1 <= distance <= 2)  
-    query = f"\
+    assert(1 <= distance <= 2)
+
+    # Backwards compatibility for deprecated ID lookups
+    try:
+        int(node_element_id)
+        query = f"\
 MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
-WHERE id(a) = {node_id} AND NOT neighbour:Handle{chr(10)}\
+WHERE ID(a) = {int(node_element_id)} AND NOT neighbour:Handle{chr(10)}\
 RETURN collect(distinct(neighbour)),r{chr(10)}\
 LIMIT {QUERY_LIMIT}"
+        logger.warning("Deprecated query - change client to use elementID")
+    except:
+        query = f"\
+    MATCH (a)-[r*0..{distance}]-(neighbour){chr(10)}\
+    WHERE elementId(a) = '{node_element_id}' AND NOT neighbour:Handle{chr(10)}\
+    RETURN collect(distinct(neighbour)),r{chr(10)}\
+    LIMIT {QUERY_LIMIT}"
+
     logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
@@ -646,6 +662,7 @@ NOT '_Bloom_Scene_' IN labels(n) AND
 NOT '_Bloom_Perspective_' IN labels(n)
 OPTIONAL MATCH (n)-[r]-(x)
 RETURN n,r
+LIMIT {QUERY_LIMIT}
 """
     logger.debug(query)
     try:
@@ -1041,7 +1058,7 @@ async def request_handles_database(req,resp,*,db):
         description: The database name
     """
     query = '''
-MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
+MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,elementId(n)
 '''
     logger.debug(query)
     try:
@@ -1055,8 +1072,8 @@ MATCH (n:Handle) WHERE n.visible IS NULL OR n.visible <> False RETURN n,ID(n)
         resp.status_code = 503
     q.close() 
 
-@api.route("/handle/{db}/{id}/{lod}")
-async def request_handle_database(req,resp,*, db, id, lod):
+@api.route("/handle/{db}/{element_id}/{lod}")
+async def request_handle_database(req,resp,*, db, element_id, lod):
     """Subgraph referenced by handle for Neo4j v4.4. Don't use for v5+
     ---
     get:
@@ -1064,12 +1081,13 @@ async def request_handle_database(req,resp,*, db, id, lod):
         description: Respond with all feed values required for a handle given ID and LOD. LOD0 is curated path. LOD1 is path and all nodes within 1 node radius of path. LOD2 is path and all nodes within 2 node radius.
         parameters:
          - in: path
-           name: id
+           name: element_id
            required: true
            schema:
-            type: integer
-            minimum: 1
-           description: The handle ID
+            type: string
+            minLength: 1
+            nullable: false
+           description: The handle elementID (e.g. "4:d8d172ec-96d8-4364-8f5d-9353d776aeb3:0")
          - in: path
            name: lod
            required: false
@@ -1093,12 +1111,44 @@ async def request_handle_database(req,resp,*, db, id, lod):
                 description: Temporary service issue. Try again later
     """
     query = f"\
-        MATCH path = (a)-[:NEXT*]->(){chr(10)}\
-        WHERE ID(a)={id}{chr(10)}\
-        UNWIND (nodes(path)) as n{chr(10)}\
-        WITH n LIMIT {QUERY_LIMIT} MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
-        WHERE NOT (b:Handle AND NOT ID(b)={id}){chr(10)}\
-        RETURN collect(nodes(path2)), collect(relationships(path2))"
+       MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+       WHERE elementId(a) = '{element_id}'{chr(10)}\
+       UNWIND nodes(path) AS n{chr(10)}\
+       WITH DISTINCT n{chr(10)}\
+       LIMIT {QUERY_LIMIT}{chr(10)}\
+       WITH collect(n) AS seedNodes{chr(10)}\
+       UNWIND seedNodes AS n{chr(10)}\
+       MATCH path2 = (n)-[*0..{lod}]-(b){chr(10)}\
+       WHERE NOT (b:Handle AND elementId(b) <> '{element_id}'){chr(10)}\
+       WITH collect(n) + collect(b) AS allNodes,{chr(10)}\
+       collect(relationships(path2)) AS allRels{chr(10)}\
+       WITH apoc.coll.toSet(apoc.coll.flatten(allNodes)) AS totalNodes, allRels{chr(10)}\
+       WITH totalNodes[0..{QUERY_LIMIT}] AS limitedNodes, allRels{chr(10)}\
+       RETURN limitedNodes AS nodes, [rel IN apoc.coll.flatten(allRels) WHERE startNode(rel){chr(10)}\
+       IN limitedNodes AND endNode(rel) IN limitedNodes] AS rels{chr(10)}\
+    "
+
+    path_only_query = f"\
+       MATCH path = (a)-[:NEXT*]->(){chr(10)}\
+       WHERE elementId(a) = '{element_id}'{chr(10)}\
+       UNWIND nodes(path) AS n{chr(10)}\
+       WITH DISTINCT n{chr(10)}\
+       LIMIT {QUERY_LIMIT}{chr(10)}\
+       WITH collect(n) AS seedNodes{chr(10)}\
+       UNWIND seedNodes AS n{chr(10)}\
+       MATCH path2 = (n)-[:NEXT*0..1]-(b){chr(10)}\
+       WHERE NOT (b:Handle AND elementId(b) <> '{element_id}'){chr(10)}\
+       WITH collect(n) + collect(b) AS allNodes,{chr(10)}\
+       collect(relationships(path2)) AS allRels{chr(10)}\
+       WITH apoc.coll.toSet(apoc.coll.flatten(allNodes)) AS totalNodes, allRels{chr(10)}\
+       WITH totalNodes[0..{QUERY_LIMIT}] AS limitedNodes, allRels{chr(10)}\
+       RETURN limitedNodes AS nodes, [rel IN apoc.coll.flatten(allRels) WHERE startNode(rel){chr(10)}\
+       IN limitedNodes AND endNode(rel) IN limitedNodes] AS rels{chr(10)}\
+    "
+
+    # CYPHER TO ENSURE RELS ARE INCLUDED
+    if int(lod) == 0:
+        query = path_only_query
 
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
@@ -1584,7 +1634,7 @@ CALL gds.nodeSimilarity.stream(
   node2,
   similarity
 WITH node1, node2, similarity
-MATCH (n),(o) WHERE ID(n)= node1 AND ID(o) = node2
+MATCH (n),(o) WHERE elementId(n)= '{node1}' AND elementId(o) = '{node2}'
 RETURN n, o ORDER by similarity DESC LIMIT  {limit}
 """
     try:
