@@ -24,14 +24,15 @@ from query import GraphQuery
 from tools import generate_grapho_id
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.ERROR)
 # create console handler and set level to debug
 ch = logging.StreamHandler()
 # ch.setLevel(logging._ExcInfoType)
 
 # create formatter - simple or more detail as required
 # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-formatter = logging.Formatter('%(message)s')
+#formatter = logging.Formatter('%(message)s')
+formatter = logging.Formatter('%(name)s %(levelname)s %(message)s')
 
 # add formatter to ch
 ch.setFormatter(formatter)
@@ -59,6 +60,9 @@ LOG_LEVEL = os.getenv('LOG_LEVEL')
 if LOG_LEVEL == "DEBUG":
     logger.setLevel(logging.DEBUG)
     ch.setLevel(logging.DEBUG)
+
+for name in ("httpx", "httpcore"):
+    logging.getLogger(name).setLevel(logging.WARNING)
 
 # Fixed Queries are hardcoded here - aka "API Handles" that do not require parameters
 # Grapho supports Handles stored in DB, API, UE Map, and overall Project 
@@ -118,6 +122,12 @@ async def calculate_total_content_length(data,type=""):
     """Calculate total content length from all media in endpoint response"""
     total_content_length = 0
     # for bespoke /all structure
+
+    #import logging
+    #for n in ("httpx", "httpcore"):
+    #    lg = logging.getLogger(n)
+    #    print(n, lg.level, lg.getEffectiveLevel(), lg.disabled, lg.handlers, lg.propagate)
+    #print("root", logging.getLogger().level, logging.getLogger().handlers)
 
     if type == "handles":
         logger.debug(f"Calculating total content length for {len(data)} handles")
@@ -411,7 +421,8 @@ async def api_all_database(req,resp,*,db):
         copyright=API_COPYRIGHT,
         graphs=graphs,
         total_content_length=graphs_content_length,
-        additional_dialogue=additional_dialogue
+        additional_dialogue=additional_dialogue,
+        query_limit=QUERY_LIMIT
     )
     # account for JSON size in total_content_length
     json_bytes = json.dumps(data).encode('utf-8')
@@ -664,7 +675,7 @@ OPTIONAL MATCH (n)-[r]-(x)
 RETURN n,r
 LIMIT {QUERY_LIMIT}
 """
-    logger.debug(query)
+    #logger.debug(query)
     try:
         q = GraphQuery(NEO4J_API, NEO4J_USER, NEO4J_PASSWORD,req, db)
         graph = q.run(query)
@@ -1011,7 +1022,7 @@ def neo4j_query(query):
         {'statement': query, 
         'resultDataContents': ['graph']}]
     }
-    print(data)
+    #print(data)
     r = requests.post(f'{NEO4J_API}/transaction/commit', \
         headers = {'Content-type': 'application/json'}, \
         json = data, \

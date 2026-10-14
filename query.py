@@ -65,7 +65,7 @@ class GraphQuery:
 
     def run(self, query,graph=True):
         with self.driver.session(database=self.database) as session:
-            print(query)
+            logger.debug(query)
             results = session.execute_read(self._read_query,query,self.path,graph)
             return results
 
